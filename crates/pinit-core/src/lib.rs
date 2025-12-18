@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+mod merge;
 pub mod resolve;
 
 use std::ffi::OsStr;
@@ -12,6 +13,44 @@ use std::process::Command;
 
 use tracing::{debug, instrument, trace};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExistingFileAction {
+    Overwrite,
+    Merge,
+    Skip,
+}
+
+impl ExistingFileAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExistingFileAction::Overwrite => "overwrite",
+            ExistingFileAction::Merge => "merge",
+            ExistingFileAction::Skip => "skip",
+        }
+    }
+}
+
+pub struct ExistingFileDecisionContext<'a> {
+    pub rel_path: &'a Path,
+    pub dest_path: &'a Path,
+    pub src_bytes: &'a [u8],
+    pub dest_bytes: &'a [u8],
+    pub merge_bytes: Option<&'a [u8]>,
+}
+
+pub trait ExistingFileDecider {
+    fn decide(&mut self, ctx: ExistingFileDecisionContext<'_>) -> ExistingFileAction;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SkipExisting;
+
+impl ExistingFileDecider for SkipExisting {
+    fn decide(&mut self, _ctx: ExistingFileDecisionContext<'_>) -> ExistingFileAction {
+        ExistingFileAction::Skip
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ApplyOptions {
     pub dry_run: bool,
@@ -20,6 +59,7 @@ pub struct ApplyOptions {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ApplyReport {
     pub created_files: usize,
+    pub updated_files: usize,
     pub skipped_files: usize,
     pub ignored_paths: usize,
 }
@@ -64,11 +104,12 @@ impl std::error::Error for ApplyError {
     }
 }
 
-#[instrument(skip(options), fields(template_dir = %template_dir.as_ref().display(), dest_dir = %dest_dir.as_ref().display(), dry_run = options.dry_run))]
+#[instrument(skip(options, decider), fields(template_dir = %template_dir.as_ref().display(), dest_dir = %dest_dir.as_ref().display(), dry_run = options.dry_run))]
 pub fn apply_template_dir(
     template_dir: impl AsRef<Path>,
     dest_dir: impl AsRef<Path>,
     options: ApplyOptions,
+    decider: &mut dyn ExistingFileDecider,
 ) -> Result<ApplyReport, ApplyError> {
     let template_dir = template_dir.as_ref();
     let dest_dir = dest_dir.as_ref();
@@ -95,7 +136,15 @@ pub fn apply_template_dir(
 
     let git_ignore = GitIgnore::detect(dest_dir)?;
     let mut report = ApplyReport::default();
-    apply_dir_recursive(template_dir, template_dir, dest_dir, options, &git_ignore, &mut report)?;
+    apply_dir_recursive(
+        template_dir,
+        template_dir,
+        dest_dir,
+        options,
+        &git_ignore,
+        decider,
+        &mut report,
+    )?;
     Ok(report)
 }
 
@@ -105,6 +154,7 @@ fn apply_dir_recursive(
     dest_root: &Path,
     options: ApplyOptions,
     git_ignore: &Option<GitIgnore>,
+    decider: &mut dyn ExistingFileDecider,
     report: &mut ApplyReport,
 ) -> Result<(), ApplyError> {
     let mut entries: Vec<_> = fs::read_dir(current)
@@ -159,7 +209,7 @@ fn apply_dir_recursive(
         }
 
         if is_dir {
-            apply_dir_recursive(root, &path, dest_root, options, git_ignore, report)?;
+            apply_dir_recursive(root, &path, dest_root, options, git_ignore, decider, report)?;
             continue;
         }
 
@@ -169,8 +219,61 @@ fn apply_dir_recursive(
 
         let dest_path = dest_root.join(rel);
         if dest_path.exists() {
-            trace!(path = %rel.display(), "skip (exists)");
-            report.skipped_files += 1;
+            let src_bytes = fs::read(&path).map_err(|e| ApplyError::Io { path: path.clone(), source: e })?;
+            let dest_bytes =
+                fs::read(&dest_path).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+
+            if src_bytes == dest_bytes {
+                trace!(path = %rel.display(), "skip (identical)");
+                report.skipped_files += 1;
+                continue;
+            }
+
+            let merge_bytes = merge::merge_file(rel, &dest_bytes, &src_bytes);
+            let action = decider.decide(ExistingFileDecisionContext {
+                rel_path: rel,
+                dest_path: &dest_path,
+                src_bytes: &src_bytes,
+                dest_bytes: &dest_bytes,
+                merge_bytes: merge_bytes.as_deref(),
+            });
+
+            trace!(path = %rel.display(), action = action.as_str(), "existing file decision");
+
+            let output_bytes = match action {
+                ExistingFileAction::Skip => {
+                    report.skipped_files += 1;
+                    continue;
+                }
+                ExistingFileAction::Overwrite => src_bytes,
+                ExistingFileAction::Merge => {
+                    let Some(merged) = merge_bytes else {
+                        debug!(path = %rel.display(), "merge unavailable; skipping");
+                        report.skipped_files += 1;
+                        continue;
+                    };
+                    merged
+                }
+            };
+
+            if output_bytes == dest_bytes {
+                trace!(path = %rel.display(), action = action.as_str(), "no changes after action");
+                report.skipped_files += 1;
+                continue;
+            }
+
+            report.updated_files += 1;
+            if options.dry_run {
+                continue;
+            }
+
+            let existing_perms = fs::metadata(&dest_path)
+                .map(|m| m.permissions())
+                .map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+            fs::write(&dest_path, &output_bytes).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+            fs::set_permissions(&dest_path, existing_perms)
+                .map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+
             continue;
         }
 

@@ -38,10 +38,12 @@ fn apply_copies_missing_files() {
         &template_dir,
         &dest_dir,
         pinit_core::ApplyOptions { dry_run: false },
+        &mut pinit_core::SkipExisting,
     )
     .unwrap();
 
     assert_eq!(report.created_files, 1);
+    assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 0);
     assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "hello\n");
 }
@@ -56,9 +58,11 @@ fn dry_run_does_not_write() {
     fs::write(template_dir.join("hello.txt"), "hello\n").unwrap();
 
     let report =
-        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: true }).unwrap();
+        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: true }, &mut pinit_core::SkipExisting)
+            .unwrap();
 
     assert_eq!(report.created_files, 1);
+    assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 0);
     assert!(!dest_dir.join("hello.txt").exists());
 }

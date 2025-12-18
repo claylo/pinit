@@ -42,8 +42,10 @@ fn always_ignores_ds_store() {
     fs::write(template_dir.join("ok.txt"), "ok\n").unwrap();
 
     let report =
-        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: false }).unwrap();
+        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: false }, &mut pinit_core::SkipExisting)
+            .unwrap();
     assert_eq!(report.created_files, 1);
+    assert_eq!(report.updated_files, 0);
     assert!(dest_dir.join("ok.txt").is_file());
     assert!(!dest_dir.join(".DS_Store").exists());
 }
@@ -79,8 +81,10 @@ fn honors_destination_gitignore() {
     fs::write(template_dir.join("ignored-dir/file.txt"), "nope\n").unwrap();
 
     let report =
-        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: false }).unwrap();
+        pinit_core::apply_template_dir(&template_dir, &dest_dir, pinit_core::ApplyOptions { dry_run: false }, &mut pinit_core::SkipExisting)
+            .unwrap();
     assert_eq!(report.created_files, 1);
+    assert_eq!(report.updated_files, 0);
     assert!(dest_dir.join("ok.txt").is_file());
     assert!(!dest_dir.join("ignored.txt").exists());
     assert!(!dest_dir.join("ignored-dir/file.txt").exists());

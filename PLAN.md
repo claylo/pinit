@@ -210,10 +210,10 @@ Diff output:
   - Output to `LICENSE` (and/or additional configured paths)
 - Tests: ensure rendered text includes injected fields for licenses that support them.
 
-### Phase 8: Documentation + deprecation path
+### Phase 8: Documentation
 - Update `README.md` to document CLI + config examples.
-- Keep `bin/install-template`/`Justfile` for one transition release, but mark deprecated and point to `pinit`.
 - Add a “how to validate” checklist (or CI for the CLI itself).
+- Add a just recipe for generating `man pinit` documentation. Use whatever means is easiest, explore Pandoc as an option
 
 ### Phase 9: Release automation (release-plz)
 - Set up release automation for *this repo* (not just the generated templates):
@@ -230,3 +230,4 @@ Diff output:
 - Optional format support (JSON), ignore globs, and `--include/--exclude`.
 - Expand language-aware merge drivers for common source files (opt-in or best-effort), with strict fallbacks to diff + user choice.
 - Add `--print-config` and `--explain <file>` debug tooling.
+
