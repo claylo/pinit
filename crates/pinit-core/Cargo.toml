@@ -8,9 +8,10 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+blake3 = "1.8.2"
+directories = "6.0.0"
 indexmap = "2.12.1"
 rust-yaml = "0.0.5"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.19"
-directories = "6.0.0"
-blake3 = "1.8.2"
+tracing = { version = "0.1.41", features = ["attributes"] }

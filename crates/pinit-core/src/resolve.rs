@@ -9,6 +9,8 @@ use std::process::Command;
 
 use crate::config::{Config, TemplateDef};
 
+use tracing::{debug, instrument};
+
 #[derive(Debug)]
 pub enum ResolveError {
     NoHomeDir,
@@ -71,6 +73,7 @@ impl TemplateResolver {
             .resolve_recipe(recipe_or_template)
             .ok_or_else(|| ResolveError::UnknownTemplate(recipe_or_template.to_string()))?;
 
+        debug!(name = recipe_or_template, templates = resolved.templates.len(), "resolve recipe");
         let mut out = Vec::new();
         for name in resolved.templates {
             out.push(self.resolve_template_dir(cfg, &name)?);
@@ -78,6 +81,7 @@ impl TemplateResolver {
         Ok(out)
     }
 
+    #[instrument(skip_all, fields(template = template_name))]
     pub fn resolve_template_dir(&self, cfg: &Config, template_name: &str) -> Result<PathBuf, ResolveError> {
         let def = cfg
             .templates
@@ -92,6 +96,7 @@ impl TemplateResolver {
     fn resolve_template_def(&self, cfg: &Config, template_name: &str, def: &TemplateDef) -> Result<PathBuf, ResolveError> {
         let path = def.path();
         if path.is_absolute() {
+            debug!(template = template_name, path = %path.display(), "resolve absolute");
             return Ok(path.to_path_buf());
         }
 
@@ -108,6 +113,7 @@ impl TemplateResolver {
             .ok_or_else(|| ResolveError::UnknownSource(source_name.to_string()))?;
 
         if let Some(root) = &source.path {
+            debug!(template = template_name, source = source_name, root = %root.display(), path = %path.display(), "resolve local");
             return Ok(root.join(path));
         }
 
@@ -115,6 +121,7 @@ impl TemplateResolver {
             return Err(ResolveError::SourceRepoMissing { source: source.name.clone() });
         };
         let git_ref = source.git_ref.as_deref().unwrap_or("HEAD");
+        debug!(template = template_name, source = source_name, repo = %repo, git_ref = %git_ref, "resolve git");
         let repo_root = self.ensure_repo_checkout(repo, git_ref)?;
         let base = match &source.subdir {
             Some(subdir) => repo_root.join(subdir),
@@ -131,9 +138,11 @@ impl TemplateResolver {
         if !repo_dir.exists() {
             fs::create_dir_all(repo_dir.parent().unwrap())
                 .map_err(|e| ResolveError::Io { path: repo_dir.clone(), source: e })?;
+            debug!(repo = %repo, dest = %repo_dir.display(), "git clone");
             git(&["clone", repo, repo_dir.to_string_lossy().as_ref()], None)?;
         } else {
             // Best-effort update.
+            debug!(repo = %repo, dest = %repo_dir.display(), "git fetch");
             let _ = git(&["-C", repo_dir.to_string_lossy().as_ref(), "fetch", "--tags", "--prune", "origin"], None);
         }
 
@@ -184,6 +193,7 @@ fn git(args: &[&str], cwd: Option<&Path>) -> Result<(), ResolveError> {
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
     }
+    debug!(cmd = %format!("git {}", args.join(" ")), "run");
     let out = cmd.output().map_err(|e| ResolveError::Io { path: PathBuf::from("git"), source: e })?;
     if out.status.success() {
         return Ok(());
@@ -214,4 +224,3 @@ fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
 pub fn path_is_git_dir(path: &Path) -> bool {
     path.join(".git").is_dir() || (path.file_name() == Some(OsStr::new(".git")))
 }
-

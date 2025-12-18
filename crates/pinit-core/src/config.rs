@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
 use serde::Deserialize;
+use tracing::{debug, instrument};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Config {
@@ -144,11 +145,13 @@ pub fn default_config_paths() -> Vec<PathBuf> {
 
 pub fn load_config(path_override: Option<&Path>) -> Result<(PathBuf, Config), ConfigError> {
     if let Some(path) = path_override {
+        debug!(path = %path.display(), "config: load override");
         return load_config_at(path);
     }
 
     for path in default_config_paths() {
         if path.is_file() {
+            debug!(path = %path.display(), "config: load");
             return load_config_at(&path);
         }
     }
@@ -156,6 +159,7 @@ pub fn load_config(path_override: Option<&Path>) -> Result<(PathBuf, Config), Co
     Err(ConfigError::NotFound)
 }
 
+#[instrument(skip_all, fields(path = %path.display()))]
 fn load_config_at(path: &Path) -> Result<(PathBuf, Config), ConfigError> {
     let content = fs::read_to_string(path).map_err(|e| ConfigError::Io { path: path.to_path_buf(), source: e })?;
     let ext = path.extension().and_then(|s| s.to_str()).unwrap_or_default().to_ascii_lowercase();

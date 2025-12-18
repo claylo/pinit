@@ -10,6 +10,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use tracing::{debug, instrument, trace};
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ApplyOptions {
     pub dry_run: bool,
@@ -62,6 +64,7 @@ impl std::error::Error for ApplyError {
     }
 }
 
+#[instrument(skip(options), fields(template_dir = %template_dir.as_ref().display(), dest_dir = %dest_dir.as_ref().display(), dry_run = options.dry_run))]
 pub fn apply_template_dir(
     template_dir: impl AsRef<Path>,
     dest_dir: impl AsRef<Path>,
@@ -113,19 +116,15 @@ fn apply_dir_recursive(
 
     // Precompute ignore matches for this directory level so we don't spawn one `git` process per path.
     let mut queries: Vec<String> = Vec::with_capacity(entries.len());
-    let mut rel_for_query: Vec<(PathBuf, bool)> = Vec::with_capacity(entries.len()); // (rel, is_dir)
-
     for entry in &entries {
         let path = entry.path();
-        let rel = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
+        let rel = path.strip_prefix(root).unwrap_or(&path);
         if rel.as_os_str() == OsStr::new("") {
             continue;
         }
         let meta = fs::symlink_metadata(&path).map_err(|e| ApplyError::Io { path: path.clone(), source: e })?;
-        let is_dir = meta.is_dir();
-        let q = format_git_rel(&rel, is_dir);
+        let q = format_git_rel(rel, meta.is_dir());
         queries.push(q);
-        rel_for_query.push((rel, is_dir));
     }
 
     let ignored = match git_ignore {
@@ -146,6 +145,7 @@ fn apply_dir_recursive(
         }
 
         if should_always_ignore(rel) {
+            trace!(path = %rel.display(), "ignored (always)");
             report.ignored_paths += 1;
             continue;
         }
@@ -153,6 +153,7 @@ fn apply_dir_recursive(
         let is_dir = meta.is_dir();
         let query = format_git_rel(rel, is_dir);
         if ignored.contains(&query) {
+            trace!(path = %query, "ignored (git)");
             report.ignored_paths += 1;
             continue;
         }
@@ -168,6 +169,7 @@ fn apply_dir_recursive(
 
         let dest_path = dest_root.join(rel);
         if dest_path.exists() {
+            trace!(path = %rel.display(), "skip (exists)");
             report.skipped_files += 1;
             continue;
         }
@@ -176,6 +178,7 @@ fn apply_dir_recursive(
             if let Some(parent) = dest_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| ApplyError::Io { path: parent.to_path_buf(), source: e })?;
             }
+            trace!(src = %path.display(), dest = %dest_path.display(), "copy");
             fs::copy(&path, &dest_path).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
         }
         report.created_files += 1;
@@ -208,6 +211,7 @@ struct GitIgnore {
 impl GitIgnore {
     fn detect(dest_root: &Path) -> Result<Option<Self>, ApplyError> {
         if !dest_root.exists() {
+            debug!(dest_root = %dest_root.display(), "gitignore: dest does not exist");
             return Ok(None);
         }
         let out = Command::new("git")
@@ -217,15 +221,19 @@ impl GitIgnore {
             .output();
 
         let Ok(out) = out else {
+            debug!(dest_root = %dest_root.display(), "gitignore: git not available");
             return Ok(None);
         };
         if !out.status.success() {
+            debug!(dest_root = %dest_root.display(), "gitignore: not a git worktree");
             return Ok(None);
         }
         let stdout = String::from_utf8_lossy(&out.stdout);
         if stdout.trim() != "true" {
+            debug!(dest_root = %dest_root.display(), inside = %stdout.trim(), "gitignore: not inside worktree");
             return Ok(None);
         }
+        debug!(dest_root = %dest_root.display(), "gitignore: enabled");
         Ok(Some(Self { cwd: dest_root.to_path_buf() }))
     }
 
@@ -234,6 +242,7 @@ impl GitIgnore {
             return Ok(std::collections::HashSet::new());
         }
 
+        trace!(count = rel_paths.len(), "gitignore: check");
         let mut child = Command::new("git")
             .arg("-C")
             .arg(&self.cwd)

@@ -2,12 +2,17 @@
 
 use std::path::PathBuf;
 
-use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(name = "pinit")]
 #[command(about = "Apply project template baselines", long_about = None)]
 struct Cli {
+    /// Increase verbosity (-v, -vv, -vvv)
+    #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
+    verbose: u8,
+
     /// Config file path (overrides default discovery)
     #[arg(long = "config", global = true)]
     config: Option<PathBuf>,
@@ -49,6 +54,7 @@ struct NewArgs {
 
 fn main() {
     let cli = Cli::parse();
+    init_tracing(cli.verbose);
 
     let Some(command) = cli.command else {
         let _ = Cli::command().print_help();
@@ -68,7 +74,37 @@ fn main() {
     }
 }
 
+fn init_tracing(verbosity: u8) {
+    let default_level = match verbosity {
+        0 => "warn",
+        1 => "info",
+        2 => "debug",
+        _ => "trace",
+    };
+
+    let default_filter = format!("warn,pinit_cli={default_level},pinit_core={default_level}");
+
+    let filter = EnvFilter::try_from_env("PINIT_LOG")
+        .or_else(|_| EnvFilter::try_from_default_env())
+        .unwrap_or_else(|_| EnvFilter::new(default_filter));
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .with_level(true)
+        .compact()
+        .init();
+}
+
 fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(), String> {
+    let dest_for_log = args
+        .dest_dir
+        .as_deref()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .display()
+        .to_string();
+    tracing::debug!(template = %args.template, dest_dir = %dest_for_log, dry_run = args.dry_run, "apply");
+
     let dest_dir = args.dest_dir.unwrap_or_else(|| PathBuf::from("."));
 
     let template_path = PathBuf::from(&args.template);
@@ -85,6 +121,7 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
     let mut created = 0usize;
     let mut skipped = 0usize;
     for dir in template_dirs {
+        tracing::info!(template_dir = %dir.display(), "apply template dir");
         let report = pinit_core::apply_template_dir(&dir, &dest_dir, pinit_core::ApplyOptions { dry_run: args.dry_run })
             .map_err(|e| e.to_string())?;
         created += report.created_files;
@@ -103,6 +140,7 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
 fn cmd_list(config_path: Option<&std::path::Path>) -> Result<(), String> {
     match pinit_core::config::load_config(config_path) {
         Ok((path, cfg)) => {
+            tracing::debug!(config = %path.display(), "loaded config");
             println!("config: {}", path.display());
 
             if !cfg.templates.is_empty() {
