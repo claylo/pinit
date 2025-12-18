@@ -1,0 +1,7 @@
+[workspace]
+# Only publish when merging the release PR created by release-plz.
+release_always = false
+
+# Keeps the template lightweight (no extra tooling required).
+semver_check = false
+

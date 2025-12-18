@@ -1,0 +1,9 @@
+* text=auto
+*.svg eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+
+/tests      export-ignore
+/.*         export-ignore
+/assets     export-ignore

@@ -1,0 +1,30 @@
+# .cargo/config.toml
+# Keep this file small. If it starts feeling like a novel, you’re doing it wrong. 🙂
+
+[alias]
+# Quality-of-life
+b = "build"
+c = "check"
+t = "test"
+r = "run"
+fmt = "fmt"
+
+# Consistent linting across workspace
+clippy-all = ["clippy", "--all-targets", "--all-features"]
+
+# nextest (if installed)
+nt = ["nextest", "run"]
+nt-ci = ["nextest", "run", "--profile", "ci"]
+
+# Doctests explicit (since nextest doesn’t cover them the same way)
+doc-test = ["test", "--doc"]
+
+# Coverage (if cargo-llvm-cov installed)
+cov = ["llvm-cov", "nextest", "--html"]
+
+# when we get there, and use cargo-zigbuild
+# xlinux = ["cross", "build", "--target", "x86_64-unknown-linux-gnu"]
+# xlinux-aarch64 = ["cross", "build", "--target", "aarch64-unknown-linux-gnu"]
+
+# cross-compile sanity checks (if cargo-zigbuild installed)
+win-gnu = ["zigbuild", "--target", "x86_64-pc-windows-gnu"]
