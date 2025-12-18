@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod resolve;
 
 use std::ffi::OsStr;
 use std::fmt;

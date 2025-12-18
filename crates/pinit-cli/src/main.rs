@@ -30,8 +30,8 @@ enum Command {
 
 #[derive(Args, Debug)]
 struct ApplyArgs {
-    /// Template directory to apply
-    template_dir: PathBuf,
+    /// Template/recipe name from config, or a path to a template directory
+    template: String,
 
     /// Destination directory (default: current directory)
     dest_dir: Option<PathBuf>,
@@ -57,7 +57,7 @@ fn main() {
     };
 
     let result = match command {
-        Command::Apply(args) => cmd_apply(args),
+        Command::Apply(args) => cmd_apply(cli.config.as_deref(), args),
         Command::List => cmd_list(cli.config.as_deref()),
         Command::New(_) => Err("new is not implemented yet".to_string()),
     };
@@ -68,25 +68,33 @@ fn main() {
     }
 }
 
-fn cmd_apply(args: ApplyArgs) -> Result<(), String> {
+fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(), String> {
     let dest_dir = args.dest_dir.unwrap_or_else(|| PathBuf::from("."));
-    let report = pinit_core::apply_template_dir(
-        &args.template_dir,
-        &dest_dir,
-        pinit_core::ApplyOptions { dry_run: args.dry_run },
-    )
-    .map_err(|e| e.to_string())?;
+
+    let template_path = PathBuf::from(&args.template);
+    let template_dirs: Vec<PathBuf> = if template_path.is_dir() {
+        vec![template_path]
+    } else {
+        let (_path, cfg) = pinit_core::config::load_config(config_path).map_err(|e| e.to_string())?;
+        let resolver = pinit_core::resolve::TemplateResolver::with_default_cache().map_err(|e| e.to_string())?;
+        resolver
+            .resolve_recipe_template_dirs(&cfg, &args.template)
+            .map_err(|e| e.to_string())?
+    };
+
+    let mut created = 0usize;
+    let mut skipped = 0usize;
+    for dir in template_dirs {
+        let report = pinit_core::apply_template_dir(&dir, &dest_dir, pinit_core::ApplyOptions { dry_run: args.dry_run })
+            .map_err(|e| e.to_string())?;
+        created += report.created_files;
+        skipped += report.skipped_files;
+    }
 
     if args.dry_run {
-        println!(
-            "dry-run: would create {} file(s), skip {} file(s)",
-            report.created_files, report.skipped_files
-        );
+        println!("dry-run: would create {} file(s), skip {} file(s)", created, skipped);
     } else {
-        println!(
-            "created {} file(s), skipped {} file(s)",
-            report.created_files, report.skipped_files
-        );
+        println!("created {} file(s), skipped {} file(s)", created, skipped);
     }
     Ok(())
 }
