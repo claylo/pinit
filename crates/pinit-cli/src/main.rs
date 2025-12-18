@@ -8,6 +8,10 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 #[command(name = "pinit")]
 #[command(about = "Apply project template baselines", long_about = None)]
 struct Cli {
+    /// Config file path (overrides default discovery)
+    #[arg(long = "config", global = true)]
+    config: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -54,7 +58,7 @@ fn main() {
 
     let result = match command {
         Command::Apply(args) => cmd_apply(args),
-        Command::List => Err("list is not implemented yet".to_string()),
+        Command::List => cmd_list(cli.config.as_deref()),
         Command::New(_) => Err("new is not implemented yet".to_string()),
     };
 
@@ -85,4 +89,46 @@ fn cmd_apply(args: ApplyArgs) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+fn cmd_list(config_path: Option<&std::path::Path>) -> Result<(), String> {
+    match pinit_core::config::load_config(config_path) {
+        Ok((path, cfg)) => {
+            println!("config: {}", path.display());
+
+            if !cfg.templates.is_empty() {
+                println!("\ntemplates:");
+                for (name, def) in &cfg.templates {
+                    let source = def.source().unwrap_or("-");
+                    println!("  {name} (source: {source}, path: {})", def.path().display());
+                }
+            }
+
+            if !cfg.targets.is_empty() {
+                println!("\ntargets:");
+                for (name, stack) in &cfg.targets {
+                    println!("  {name} = {}", stack.join(" + "));
+                }
+            }
+
+            if !cfg.recipes.is_empty() {
+                println!("\nrecipes:");
+                for (name, recipe) in &cfg.recipes {
+                    let tmpl = if recipe.templates.is_empty() {
+                        "-".to_string()
+                    } else {
+                        recipe.templates.join(" + ")
+                    };
+                    println!("  {name} (templates: {tmpl}, filesets: {})", recipe.files.len());
+                }
+            }
+
+            Ok(())
+        }
+        Err(pinit_core::config::ConfigError::NotFound) => {
+            println!("no config found");
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }

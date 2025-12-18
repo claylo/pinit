@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod config;
+
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
@@ -139,4 +141,3 @@ fn apply_dir_recursive(
 
     Ok(())
 }
-
