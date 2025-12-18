@@ -1,11 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 fn make_temp_root() -> TempRoot {
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+    let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-smoke-{}-{nanos}", std::process::id()));
+    path.push(format!("pinit-smoke-{}-{n}", std::process::id()));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -61,4 +62,3 @@ fn dry_run_does_not_write() {
     assert_eq!(report.skipped_files, 0);
     assert!(!dest_dir.join("hello.txt").exists());
 }
-

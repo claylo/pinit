@@ -89,6 +89,7 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
             .map_err(|e| e.to_string())?;
         created += report.created_files;
         skipped += report.skipped_files;
+        // ignored paths are intentionally omitted from the default summary for now.
     }
 
     if args.dry_run {

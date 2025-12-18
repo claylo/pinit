@@ -1,19 +1,21 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use pinit_core::config::{Config, Source, TemplateDef};
 use pinit_core::resolve::{ResolveError, TemplateResolver};
+
+static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 fn git_available() -> bool {
     Command::new("git").arg("--version").output().is_ok()
 }
 
 fn make_temp_root() -> TempRoot {
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-resolve-test-{}-{nanos}", std::process::id()));
+    path.push(format!("pinit-resolve-test-{}-{n}", std::process::id()));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -83,8 +85,7 @@ fn resolves_git_template_from_cached_clone() {
 
     assert!(Command::new("git")
         .arg("init")
-        .arg("-b")
-        .arg("main")
+        .arg("-q")
         .arg(&repo_dir)
         .output()
         .unwrap()
@@ -133,8 +134,7 @@ fn missing_git_ref_returns_error() {
 
     assert!(Command::new("git")
         .arg("init")
-        .arg("-b")
-        .arg("main")
+        .arg("-q")
         .arg(&repo_dir)
         .output()
         .unwrap()
