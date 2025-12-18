@@ -214,6 +214,7 @@ Diff output:
 - Update `README.md` to document CLI + config examples.
 - Add a “how to validate” checklist (or CI for the CLI itself).
 - Add a just recipe for generating `man pinit` documentation. Use whatever means is easiest, explore Pandoc as an option
+- Add a just recipe for `just local-smoke` that installs the build target cli in `~/.bin` for testing outside of the cargo environment.
 
 ### Phase 9: Release automation (release-plz)
 - Set up release automation for *this repo* (not just the generated templates):

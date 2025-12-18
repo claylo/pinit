@@ -231,4 +231,45 @@ mod tests {
         assert!(!rendered.text.contains("<<var;"));
         assert!(!rendered.text.contains("<<beginOptional>>"));
     }
+
+    #[test]
+    fn unknown_spdx_id_errors() {
+        let err = render_spdx_license("Definitely-Not-A-License", &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LicenseError::UnknownSpdxId { .. }));
+    }
+
+    #[test]
+    fn directive_var_uses_original_when_missing() {
+        let tpl = "X <<var;name=\"missing\";original=\"DEFAULT\">> Y";
+        let out = expand_spdx_template("X", tpl, &BTreeMap::new()).unwrap();
+        assert_eq!(out, "X DEFAULT Y");
+    }
+
+    #[test]
+    fn directive_var_errors_when_missing_without_original() {
+        let tpl = "X <<var;name=\"missing\">> Y";
+        let err = expand_spdx_template("X", tpl, &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LicenseError::MissingTemplateVar { ref name, .. } if name == "missing"));
+    }
+
+    #[test]
+    fn unterminated_directive_errors() {
+        let tpl = "X <<var;name=\"x\"";
+        let err = expand_spdx_template("X", tpl, &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, LicenseError::UnterminatedDirective { .. }));
+    }
+
+    #[test]
+    fn split_semicolons_respects_quotes() {
+        let parts = split_semicolons(r#"var;name="a;b";original='c;d';x=y"#);
+        assert_eq!(parts, vec!["var", r#"name="a;b""#, "original='c;d'", "x=y"]);
+    }
+
+    #[test]
+    fn replace_angle_placeholders_substitutes_known_keys() {
+        let mut args = BTreeMap::new();
+        args.insert("year".to_string(), "2025".to_string());
+        let out = replace_angle_placeholders("Copyright <year> <unknown>", &args);
+        assert_eq!(out, "Copyright 2025 <unknown>");
+    }
 }

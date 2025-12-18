@@ -224,3 +224,36 @@ fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
 pub fn path_is_git_dir(path: &Path) -> bool {
     path.join(".git").is_dir() || (path.file_name() == Some(OsStr::new(".git")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn looks_like_hex_requires_min_len_and_hex_chars() {
+        assert!(!looks_like_hex("abc"));
+        assert!(!looks_like_hex("zzzzzzz"));
+        assert!(looks_like_hex("0123456"));
+        assert!(looks_like_hex("deadBEEF"));
+    }
+
+    #[test]
+    fn path_is_git_dir_matches_dot_git_dir() {
+        let tmp = std::env::temp_dir().join(format!("pinit-path-is-git-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join(".git")).unwrap();
+
+        assert!(path_is_git_dir(&tmp));
+        assert!(path_is_git_dir(&tmp.join(".git")));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn cache_key_is_stable() {
+        let a = cache_key("repo", "ref");
+        let b = cache_key("repo", "ref");
+        assert_eq!(a, b);
+        assert_ne!(a, cache_key("repo", "ref2"));
+    }
+}

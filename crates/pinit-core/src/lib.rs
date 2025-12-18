@@ -115,8 +115,13 @@ pub fn apply_template_dir(
     let template_dir = template_dir.as_ref();
     let dest_dir = dest_dir.as_ref();
 
-    let template_meta =
-        fs::symlink_metadata(template_dir).map_err(|e| ApplyError::Io { path: template_dir.to_path_buf(), source: e })?;
+    let template_meta = fs::symlink_metadata(template_dir).map_err(|e| {
+        if e.kind() == io::ErrorKind::NotFound {
+            ApplyError::TemplateDirNotFound(template_dir.to_path_buf())
+        } else {
+            ApplyError::Io { path: template_dir.to_path_buf(), source: e }
+        }
+    })?;
     if template_meta.file_type().is_symlink() {
         return Err(ApplyError::SymlinkNotSupported(template_dir.to_path_buf()));
     }
@@ -487,5 +492,37 @@ impl GitIgnore {
             ignored.insert(path.to_string());
         }
         Ok(ignored)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+    fn make_temp_dir(prefix: &str) -> PathBuf {
+        let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut path = std::env::temp_dir();
+        path.push(format!("pinit-core-lib-{prefix}-{}-{n}", std::process::id()));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn gitignore_failed_variant_is_reachable() {
+        let temp = make_temp_dir("gitignore-fail");
+        let gi = GitIgnore { cwd: temp.join("missing") };
+        let err = gi.ignored_set(&["a.txt".to_string()]).unwrap_err();
+        assert!(matches!(err, ApplyError::GitIgnoreFailed { .. }));
+        let _ = fs::remove_dir_all(temp);
+    }
+
+    #[test]
+    fn format_git_rel_adds_trailing_slash_for_dirs() {
+        assert_eq!(format_git_rel(Path::new("a/b"), true), "a/b/");
+        assert_eq!(format_git_rel(Path::new("a/b/"), true), "a/b/");
+        assert_eq!(format_git_rel(Path::new("a/b"), false), "a/b");
     }
 }

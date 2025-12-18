@@ -513,4 +513,164 @@ include = ["README.md", ".github/workflows/*.yml"]
         assert_eq!(resolved.files.len(), 1);
         assert_eq!(resolved.files[0].include.len(), 2);
     }
+
+    #[test]
+    fn parses_toml_license_detailed_with_defaults() {
+        let cfg: Config = toml::from_str(
+            r#"
+[license]
+spdx = "MIT"
+year = "2025"
+name = "Clay"
+
+[templates]
+rust = "/tmp"
+"#,
+        )
+        .unwrap();
+
+        let lic = cfg.license.unwrap();
+        assert_eq!(lic.spdx(), "MIT");
+        assert_eq!(lic.output_path(), PathBuf::from("LICENSE"));
+        let args = lic.template_args();
+        assert_eq!(args.get("year").unwrap(), "2025");
+        assert_eq!(args.get("fullname").unwrap(), "Clay");
+        assert_eq!(args.get("copyright holders").unwrap(), "Clay");
+    }
+
+    #[test]
+    fn parses_yaml_license_detailed() {
+        let yaml = r#"
+license:
+  spdx: MIT
+  year: "2025"
+  name: Clay
+  output: LICENSES/MIT.txt
+  args:
+    files: "this software"
+templates:
+  rust: rust
+"#;
+
+        let root = make_temp_root();
+        let path = root.join("pinit.yaml");
+        fs::write(&path, yaml).unwrap();
+
+        let (_, cfg) = load_config(Some(&path)).unwrap();
+        let lic = cfg.license.unwrap();
+        assert_eq!(lic.spdx(), "MIT");
+        assert_eq!(lic.output_path(), PathBuf::from("LICENSES/MIT.txt"));
+        let args = lic.template_args();
+        assert_eq!(args.get("year").unwrap(), "2025");
+        assert_eq!(args.get("fullname").unwrap(), "Clay");
+        assert_eq!(args.get("files").unwrap(), "this software");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_config_invalid_toml_errors() {
+        let root = make_temp_root();
+        let path = root.join("pinit.toml");
+        fs::write(&path, "this is not toml = ").unwrap();
+        let err = load_config(Some(&path)).unwrap_err();
+        assert!(matches!(err, ConfigError::ParseToml { .. }));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_config_yaml_root_not_mapping_errors() {
+        let root = make_temp_root();
+        let path = root.join("pinit.yaml");
+        fs::write(&path, "- a\n- b\n").unwrap();
+        let err = load_config(Some(&path)).unwrap_err();
+        assert!(matches!(err, ConfigError::YamlRootNotMapping { .. }));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn yaml_value_string_coercions() {
+        assert_eq!(yaml_as_string(&rust_yaml::Value::Bool(true)).as_deref(), Some("true"));
+        assert_eq!(yaml_as_string(&rust_yaml::Value::Bool(false)).as_deref(), Some("false"));
+        assert_eq!(yaml_as_string(&rust_yaml::Value::Int(42)).as_deref(), Some("42"));
+        assert!(yaml_as_string(&rust_yaml::Value::Float(3.14)).unwrap().starts_with("3.14"));
+
+        let seq = rust_yaml::Value::Sequence(vec![rust_yaml::Value::Int(1), rust_yaml::Value::Bool(false)]);
+        assert_eq!(yaml_as_vec_of_strings(&seq).unwrap(), vec!["1".to_string(), "false".to_string()]);
+
+        let bad = rust_yaml::Value::Sequence(vec![rust_yaml::Value::Mapping(IndexMap::new())]);
+        assert!(yaml_as_vec_of_strings(&bad).is_none());
+    }
+
+    #[test]
+    fn yaml_to_config_handles_sources_templates_targets_and_recipes() {
+        let mut root = IndexMap::new();
+        root.insert(yaml_key("common"), rust_yaml::Value::String("common".to_string()));
+
+        let mut lic_map = IndexMap::new();
+        lic_map.insert(yaml_key("id"), rust_yaml::Value::String("MIT".to_string()));
+        lic_map.insert(yaml_key("path"), rust_yaml::Value::String("LICENSES/MIT.txt".to_string()));
+        root.insert(yaml_key("license"), rust_yaml::Value::Mapping(lic_map));
+
+        let mut src_ok = IndexMap::new();
+        src_ok.insert(yaml_key("name"), rust_yaml::Value::String("local".to_string()));
+        src_ok.insert(yaml_key("path"), rust_yaml::Value::String("/tmp/templates".to_string()));
+        let src_missing_name = rust_yaml::Value::Mapping(IndexMap::new());
+        root.insert(
+            yaml_key("sources"),
+            rust_yaml::Value::Sequence(vec![
+                rust_yaml::Value::Mapping(src_ok),
+                rust_yaml::Value::String("not-a-map".to_string()),
+                src_missing_name,
+            ]),
+        );
+
+        let mut templates = IndexMap::new();
+        templates.insert(yaml_key("rust"), rust_yaml::Value::String("rust".to_string()));
+        let mut detailed = IndexMap::new();
+        detailed.insert(yaml_key("source"), rust_yaml::Value::String("local".to_string()));
+        detailed.insert(yaml_key("path"), rust_yaml::Value::String("common".to_string()));
+        templates.insert(yaml_key("common"), rust_yaml::Value::Mapping(detailed));
+        templates.insert(yaml_key("bad"), rust_yaml::Value::Mapping(IndexMap::new()));
+        root.insert(yaml_key("templates"), rust_yaml::Value::Mapping(templates));
+
+        let mut targets = IndexMap::new();
+        targets.insert(
+            yaml_key("rust"),
+            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("common".to_string()), rust_yaml::Value::String("rust".to_string())]),
+        );
+        targets.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
+        root.insert(yaml_key("targets"), rust_yaml::Value::Mapping(targets));
+
+        let mut recipes = IndexMap::new();
+        let mut recipe_map = IndexMap::new();
+        recipe_map.insert(
+            yaml_key("templates"),
+            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("rust".to_string())]),
+        );
+        let mut fs_ok = IndexMap::new();
+        fs_ok.insert(yaml_key("root"), rust_yaml::Value::String("/tmp".to_string()));
+        fs_ok.insert(
+            yaml_key("include"),
+            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("README.md".to_string())]),
+        );
+        recipe_map.insert(
+            yaml_key("files"),
+            rust_yaml::Value::Sequence(vec![rust_yaml::Value::Mapping(fs_ok), rust_yaml::Value::String("bad".to_string())]),
+        );
+        recipes.insert(yaml_key("r1"), rust_yaml::Value::Mapping(recipe_map));
+        recipes.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
+        root.insert(yaml_key("recipes"), rust_yaml::Value::Mapping(recipes));
+
+        let cfg = yaml_to_config(Path::new("x"), &rust_yaml::Value::Mapping(root)).unwrap();
+        assert_eq!(cfg.common.as_deref(), Some("common"));
+        assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
+        assert_eq!(cfg.license.as_ref().unwrap().output_path().to_string_lossy(), "LICENSES/MIT.txt");
+        assert_eq!(cfg.sources.len(), 1);
+        assert!(cfg.templates.contains_key("rust"));
+        assert!(cfg.templates.contains_key("common"));
+        assert_eq!(cfg.targets.get("rust").unwrap(), &vec!["common".to_string(), "rust".to_string()]);
+        assert!(cfg.recipes.contains_key("r1"));
+        assert_eq!(cfg.recipes["r1"].files.len(), 1);
+    }
 }

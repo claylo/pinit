@@ -161,3 +161,67 @@ fn missing_git_ref_returns_error() {
         other => panic!("unexpected error: {other:?}"),
     }
 }
+
+#[test]
+fn resolve_errors_on_unknown_template() {
+    let resolver = TemplateResolver::new(std::env::temp_dir().join("pinit-resolve-cache-errors"));
+    let cfg = Config::default();
+    let err = resolver.resolve_template_dir(&cfg, "nope").unwrap_err();
+    match err {
+        ResolveError::UnknownTemplate(_) => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
+fn resolve_errors_on_unknown_source() {
+    let resolver = TemplateResolver::new(std::env::temp_dir().join("pinit-resolve-cache-errors"));
+    let mut cfg = Config::default();
+    cfg.templates.insert(
+        "t".into(),
+        TemplateDef::Detailed { source: Some("missing".into()), path: PathBuf::from("x") },
+    );
+    let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();
+    match err {
+        ResolveError::UnknownSource(_) => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
+fn resolve_errors_on_source_repo_missing() {
+    let resolver = TemplateResolver::new(std::env::temp_dir().join("pinit-resolve-cache-errors"));
+    let mut cfg = Config::default();
+    cfg.sources.push(Source { name: "local".into(), path: None, repo: None, git_ref: None, subdir: None });
+    cfg.templates.insert(
+        "t".into(),
+        TemplateDef::Detailed { source: Some("local".into()), path: PathBuf::from("x") },
+    );
+    let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();
+    match err {
+        ResolveError::SourceRepoMissing { .. } => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
+fn resolve_errors_when_template_path_not_dir() {
+    let root = make_temp_root();
+    let templates_root = root.join("templates");
+    fs::create_dir_all(&templates_root).unwrap();
+    fs::write(templates_root.join("not_a_dir"), "x").unwrap();
+
+    let resolver = TemplateResolver::new(root.join("cache"));
+    let mut cfg = Config::default();
+    cfg.sources.push(Source { name: "local".into(), path: Some(templates_root.clone()), ..Default::default() });
+    cfg.templates.insert(
+        "t".into(),
+        TemplateDef::Detailed { source: Some("local".into()), path: PathBuf::from("not_a_dir") },
+    );
+
+    let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();
+    match err {
+        ResolveError::TemplatePathNotDir(_) => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
