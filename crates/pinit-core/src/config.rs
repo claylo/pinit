@@ -15,6 +15,8 @@ use tracing::{debug, instrument};
 pub struct Config {
     pub common: Option<String>,
 
+    pub license: Option<LicenseDef>,
+
     #[serde(default)]
     pub sources: Vec<Source>,
 
@@ -26,6 +28,65 @@ pub struct Config {
 
     #[serde(default)]
     pub recipes: BTreeMap<String, RecipeDef>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum LicenseDef {
+    Spdx(String),
+    Detailed(LicenseDetailed),
+}
+
+impl LicenseDef {
+    pub fn spdx(&self) -> &str {
+        match self {
+            LicenseDef::Spdx(s) => s.as_str(),
+            LicenseDef::Detailed(d) => d.spdx.as_str(),
+        }
+    }
+
+    pub fn output_path(&self) -> PathBuf {
+        match self {
+            LicenseDef::Spdx(_) => PathBuf::from("LICENSE"),
+            LicenseDef::Detailed(d) => d.output.clone().unwrap_or_else(|| PathBuf::from("LICENSE")),
+        }
+    }
+
+    pub fn template_args(&self) -> BTreeMap<String, String> {
+        match self {
+            LicenseDef::Spdx(_) => BTreeMap::new(),
+            LicenseDef::Detailed(d) => {
+                let mut args = d.args.clone();
+                if let Some(year) = d.year.as_deref() {
+                    args.entry("year".to_string()).or_insert_with(|| year.to_string());
+                }
+                if let Some(name) = d.name.as_deref() {
+                    args.entry("fullname".to_string()).or_insert_with(|| name.to_string());
+                    args.entry("copyright holders".to_string()).or_insert_with(|| name.to_string());
+                }
+                args
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct LicenseDetailed {
+    /// SPDX license identifier, e.g. `MIT`, `Apache-2.0`.
+    pub spdx: String,
+
+    /// Destination path relative to the project root. Default: `LICENSE`.
+    pub output: Option<PathBuf>,
+
+    /// Convenience: fills the SPDX `year` template variable.
+    pub year: Option<String>,
+
+    /// Convenience: fills the SPDX `fullname` template variable.
+    pub name: Option<String>,
+
+    /// SPDX template variables by name, e.g. `copyright holders`.
+    #[serde(default)]
+    pub args: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -204,6 +265,8 @@ fn yaml_to_config(path: &Path, root: &rust_yaml::Value) -> Result<Config, Config
 
     cfg.common = yaml_get_string(map, "common");
 
+    cfg.license = yaml_get(map, "license").and_then(|v| yaml_to_license(v));
+
     if let Some(sources) = yaml_get_seq(map, "sources") {
         for source in sources {
             let Some(source_map) = yaml_as_mapping(source) else { continue };
@@ -321,6 +384,33 @@ fn yaml_as_vec_of_strings(y: &rust_yaml::Value) -> Option<Vec<String>> {
     }
 }
 
+fn yaml_to_license(y: &rust_yaml::Value) -> Option<LicenseDef> {
+    if let Some(s) = yaml_as_string(y) {
+        return Some(LicenseDef::Spdx(s));
+    }
+
+    let map = yaml_as_mapping(y)?;
+    let spdx = yaml_get_string(map, "spdx")
+        .or_else(|| yaml_get_string(map, "id"))
+        .or_else(|| yaml_get_string(map, "license"))
+        ?;
+
+    let output = yaml_get_string(map, "output").or_else(|| yaml_get_string(map, "path")).map(PathBuf::from);
+    let year = yaml_get_string(map, "year");
+    let name = yaml_get_string(map, "name");
+
+    let mut args = BTreeMap::new();
+    if let Some(args_map) = yaml_get(map, "args").and_then(yaml_as_mapping) {
+        for (k, v) in args_map {
+            let Some(key) = yaml_as_string(k) else { continue };
+            let Some(val) = yaml_as_string(v) else { continue };
+            args.insert(key, val);
+        }
+    }
+
+    Some(LicenseDef::Detailed(LicenseDetailed { spdx, output, year, name, args }))
+}
+
 impl Config {
     pub fn resolve_recipe(&self, name: &str) -> Option<ResolvedRecipe> {
         if let Some(def) = self.recipes.get(name) {
@@ -384,6 +474,7 @@ rust = ["common", "rust"]
     fn parses_yaml_and_resolves_target() {
         let yaml = r#"
 common: common
+license: MIT
 templates:
   common: common
   rust: rust
@@ -398,6 +489,7 @@ targets:
         let (_, cfg) = load_config(Some(&path)).unwrap();
         let resolved = cfg.resolve_recipe("rust").unwrap();
         assert_eq!(resolved.templates, vec!["common".to_string(), "rust".to_string()]);
+        assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
 
         let _ = fs::remove_dir_all(root);
     }

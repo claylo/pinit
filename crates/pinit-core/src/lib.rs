@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod licensing;
 mod merge;
 pub mod resolve;
 
@@ -146,6 +147,99 @@ pub fn apply_template_dir(
         &mut report,
     )?;
     Ok(report)
+}
+
+#[instrument(skip(options, decider, contents), fields(dest_dir = %dest_dir.as_ref().display(), rel_path = %rel_path.as_ref().display(), dry_run = options.dry_run))]
+pub fn apply_generated_file(
+    dest_dir: impl AsRef<Path>,
+    rel_path: impl AsRef<Path>,
+    contents: &[u8],
+    options: ApplyOptions,
+    decider: &mut dyn ExistingFileDecider,
+) -> Result<ApplyReport, ApplyError> {
+    let dest_dir = dest_dir.as_ref();
+    let rel_path = rel_path.as_ref();
+
+    if rel_path.as_os_str() == OsStr::new("") {
+        return Ok(ApplyReport::default());
+    }
+    if should_always_ignore(rel_path) {
+        trace!(path = %rel_path.display(), "ignored (always)");
+        return Ok(ApplyReport { ignored_paths: 1, ..ApplyReport::default() });
+    }
+
+    if let Ok(dest_meta) = fs::symlink_metadata(dest_dir) {
+        if dest_meta.file_type().is_symlink() {
+            return Err(ApplyError::SymlinkNotSupported(dest_dir.to_path_buf()));
+        }
+        if !dest_meta.is_dir() {
+            return Err(ApplyError::DestDirNotDir(dest_dir.to_path_buf()));
+        }
+    } else if !options.dry_run {
+        fs::create_dir_all(dest_dir).map_err(|e| ApplyError::Io { path: dest_dir.to_path_buf(), source: e })?;
+    }
+
+    let git_ignore = GitIgnore::detect(dest_dir)?;
+    if let Some(g) = &git_ignore {
+        let query = format_git_rel(rel_path, false);
+        if g.ignored_set(&[query.clone()])?.contains(&query) {
+            trace!(path = %query, "ignored (git)");
+            return Ok(ApplyReport { ignored_paths: 1, ..ApplyReport::default() });
+        }
+    }
+
+    let dest_path = dest_dir.join(rel_path);
+    if dest_path.exists() {
+        let dest_bytes = fs::read(&dest_path).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+        if dest_bytes == contents {
+            trace!(path = %rel_path.display(), "skip (identical)");
+            return Ok(ApplyReport { skipped_files: 1, ..ApplyReport::default() });
+        }
+
+        let action = decider.decide(ExistingFileDecisionContext {
+            rel_path,
+            dest_path: &dest_path,
+            src_bytes: contents,
+            dest_bytes: &dest_bytes,
+            merge_bytes: None,
+        });
+
+        trace!(path = %rel_path.display(), action = action.as_str(), "existing file decision (generated)");
+
+        match action {
+            ExistingFileAction::Skip | ExistingFileAction::Merge => {
+                if action == ExistingFileAction::Merge {
+                    debug!(path = %rel_path.display(), "merge unavailable for generated file; skipping");
+                }
+                return Ok(ApplyReport { skipped_files: 1, ..ApplyReport::default() });
+            }
+            ExistingFileAction::Overwrite => {}
+        }
+
+        if options.dry_run {
+            return Ok(ApplyReport { updated_files: 1, ..ApplyReport::default() });
+        }
+
+        let existing_perms = fs::metadata(&dest_path)
+            .map(|m| m.permissions())
+            .map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+        if let Some(parent) = dest_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| ApplyError::Io { path: parent.to_path_buf(), source: e })?;
+        }
+        fs::write(&dest_path, contents).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+        fs::set_permissions(&dest_path, existing_perms).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+        return Ok(ApplyReport { updated_files: 1, ..ApplyReport::default() });
+    }
+
+    if options.dry_run {
+        return Ok(ApplyReport { created_files: 1, ..ApplyReport::default() });
+    }
+
+    if let Some(parent) = dest_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| ApplyError::Io { path: parent.to_path_buf(), source: e })?;
+    }
+    fs::write(&dest_path, contents).map_err(|e| ApplyError::Io { path: dest_path.clone(), source: e })?;
+    Ok(ApplyReport { created_files: 1, ..ApplyReport::default() })
 }
 
 fn apply_dir_recursive(

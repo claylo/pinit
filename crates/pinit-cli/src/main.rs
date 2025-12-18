@@ -168,13 +168,15 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
 
     let mut decider = CliDecider::new(default_action, args.yes || args.overwrite || args.merge || args.skip);
 
-    let report = apply_template_stack(
+    let mut report = apply_template_stack(
         config_path,
         &args.template,
         &dest_dir,
         pinit_core::ApplyOptions { dry_run: args.dry_run },
         &mut decider,
     )?;
+
+    report = maybe_apply_license(config_path, &args.template, &dest_dir, pinit_core::ApplyOptions { dry_run: args.dry_run }, &mut decider, report)?;
 
     print_apply_summary(args.dry_run, report);
     Ok(())
@@ -200,13 +202,15 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         };
 
         let mut decider = CliDecider::new(default_action, true);
-        let report = apply_template_stack(
+        let mut report = apply_template_stack(
             config_path,
             &args.template,
             &args.dir,
             pinit_core::ApplyOptions { dry_run: true },
             &mut decider,
         )?;
+
+        report = maybe_apply_license(config_path, &args.template, &args.dir, pinit_core::ApplyOptions { dry_run: true }, &mut decider, report)?;
 
         eprintln!("dry-run: would create directory {}", args.dir.display());
         if args.no_git {
@@ -244,13 +248,15 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
     };
 
     let mut decider = CliDecider::new(default_action, args.yes || args.overwrite || args.merge || args.skip);
-    let report = apply_template_stack(
+    let mut report = apply_template_stack(
         config_path,
         &args.template,
         &args.dir,
         pinit_core::ApplyOptions { dry_run: false },
         &mut decider,
     )?;
+
+    report = maybe_apply_license(config_path, &args.template, &args.dir, pinit_core::ApplyOptions { dry_run: false }, &mut decider, report)?;
 
     print_apply_summary(false, report);
     Ok(())
@@ -263,10 +269,10 @@ fn apply_template_stack(
     options: pinit_core::ApplyOptions,
     decider: &mut dyn ExistingFileDecider,
 ) -> Result<pinit_core::ApplyReport, String> {
-    let template_dirs = resolve_template_dirs(config_path, template)?;
+    let resolved = resolve_template_dirs(config_path, template)?;
 
     let mut report = pinit_core::ApplyReport::default();
-    for dir in template_dirs {
+    for dir in resolved.template_dirs {
         tracing::info!(template_dir = %dir.display(), "apply template dir");
         let r = pinit_core::apply_template_dir(&dir, dest_dir, options, decider).map_err(|e| e.to_string())?;
         report.created_files += r.created_files;
@@ -277,17 +283,20 @@ fn apply_template_stack(
     Ok(report)
 }
 
-fn resolve_template_dirs(config_path: Option<&std::path::Path>, template: &str) -> Result<Vec<PathBuf>, String> {
+struct TemplateResolution {
+    template_dirs: Vec<PathBuf>,
+}
+
+fn resolve_template_dirs(config_path: Option<&std::path::Path>, template: &str) -> Result<TemplateResolution, String> {
     let template_path = PathBuf::from(template);
     if template_path.is_dir() {
-        return Ok(vec![template_path]);
+        return Ok(TemplateResolution { template_dirs: vec![template_path] });
     }
 
     let (_path, cfg) = pinit_core::config::load_config(config_path).map_err(|e| e.to_string())?;
     let resolver = pinit_core::resolve::TemplateResolver::with_default_cache().map_err(|e| e.to_string())?;
-    resolver
-        .resolve_recipe_template_dirs(&cfg, template)
-        .map_err(|e| e.to_string())
+    let dirs = resolver.resolve_recipe_template_dirs(&cfg, template).map_err(|e| e.to_string())?;
+    Ok(TemplateResolution { template_dirs: dirs })
 }
 
 fn print_apply_summary(dry_run: bool, report: pinit_core::ApplyReport) {
@@ -302,6 +311,48 @@ fn print_apply_summary(dry_run: bool, report: pinit_core::ApplyReport) {
             report.created_files, report.updated_files, report.skipped_files
         );
     }
+}
+
+fn maybe_apply_license(
+    config_path: Option<&std::path::Path>,
+    template: &str,
+    dest_dir: &std::path::Path,
+    options: pinit_core::ApplyOptions,
+    decider: &mut dyn ExistingFileDecider,
+    mut report: pinit_core::ApplyReport,
+) -> Result<pinit_core::ApplyReport, String> {
+    // Only apply config-driven license injection when resolving by name (not when directly applying a template dir).
+    if PathBuf::from(template).is_dir() {
+        return Ok(report);
+    }
+
+    let Ok((_path, cfg)) = pinit_core::config::load_config(config_path) else {
+        return Ok(report);
+    };
+
+    let Some(license_def) = cfg.license.as_ref() else {
+        return Ok(report);
+    };
+
+    let rel_path = license_def.output_path();
+    if rel_path.is_absolute() {
+        return Err(format!("license.output must be a relative path, got {}", rel_path.display()));
+    }
+
+    let rendered = pinit_core::licensing::render_spdx_license(license_def.spdx(), &license_def.template_args())
+        .map_err(|e| e.to_string())?;
+
+    let mut bytes = rendered.text.into_bytes();
+    if !bytes.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+
+    let r = pinit_core::apply_generated_file(dest_dir, &rel_path, &bytes, options, decider).map_err(|e| e.to_string())?;
+    report.created_files += r.created_files;
+    report.updated_files += r.updated_files;
+    report.skipped_files += r.skipped_files;
+    report.ignored_paths += r.ignored_paths;
+    Ok(report)
 }
 
 fn git_init(dir: &std::path::Path, branch: &str) -> Result<(), String> {
@@ -639,5 +690,54 @@ mod tests {
             .unwrap();
         assert!(out.status.success());
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "main");
+    }
+
+    #[test]
+    fn new_writes_license_from_config() {
+        let root = make_temp_root();
+        let template_dir = root.join("template");
+        let dest = root.join("proj");
+        let config_path = root.join("pinit.toml");
+
+        fs::create_dir_all(&template_dir).unwrap();
+        fs::write(template_dir.join("hello.txt"), "hello\n").unwrap();
+
+        fs::write(
+            &config_path,
+            format!(
+                r#"
+[license]
+spdx = "MIT"
+year = "2025"
+name = "Clay"
+
+[templates]
+rust = "{}"
+"#,
+                template_dir.display()
+            ),
+        )
+        .unwrap();
+
+        cmd_new(
+            Some(&config_path),
+            NewArgs {
+                template: "rust".to_string(),
+                dir: dest.clone(),
+                dry_run: false,
+                yes: true,
+                overwrite: false,
+                merge: false,
+                skip: false,
+                git: false,
+                no_git: true,
+                branch: "main".to_string(),
+            },
+        )
+        .unwrap();
+
+        let license = fs::read_to_string(dest.join("LICENSE")).unwrap();
+        assert!(license.contains("2025"));
+        assert!(license.contains("Clay"));
     }
 }
