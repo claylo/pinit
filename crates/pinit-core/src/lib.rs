@@ -373,7 +373,9 @@ impl GitIgnore {
             .wait_with_output()
             .map_err(|e| ApplyError::Io { path: PathBuf::from("git"), source: e })?;
 
-        if !out.status.success() {
+        let status_code = out.status.code().unwrap_or(1);
+        // `git check-ignore` returns exit status 1 when no paths are ignored.
+        if !out.status.success() && status_code != 1 {
             let status = out.status.code().unwrap_or(1);
             let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
             return Err(ApplyError::GitIgnoreFailed {
