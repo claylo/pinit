@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+//! Core template-application engine used by the pinit CLI.
+//!
+//! The API is intentionally small: callers supply a template directory, a destination
+//! directory, and a strategy for resolving conflicts when destination files already exist.
+
 pub mod config;
 pub mod licensing;
 mod merge;
@@ -14,6 +19,7 @@ use std::process::Command;
 
 use tracing::{debug, instrument, trace};
 
+/// Action to take when the destination file already exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExistingFileAction {
     Overwrite,
@@ -22,6 +28,7 @@ pub enum ExistingFileAction {
 }
 
 impl ExistingFileAction {
+    /// String label used for logging and diagnostics.
     pub fn as_str(self) -> &'static str {
         match self {
             ExistingFileAction::Overwrite => "overwrite",
@@ -31,18 +38,26 @@ impl ExistingFileAction {
     }
 }
 
+/// Context describing an existing destination file and its candidate replacements.
 pub struct ExistingFileDecisionContext<'a> {
+    /// Relative path within the destination.
     pub rel_path: &'a Path,
+    /// Destination path on disk.
     pub dest_path: &'a Path,
+    /// Bytes from the template.
     pub src_bytes: &'a [u8],
+    /// Bytes from the destination.
     pub dest_bytes: &'a [u8],
+    /// Merged bytes, if a merge driver could produce them.
     pub merge_bytes: Option<&'a [u8]>,
 }
 
+/// Decide what to do when a destination file already exists.
 pub trait ExistingFileDecider {
     fn decide(&mut self, ctx: ExistingFileDecisionContext<'_>) -> ExistingFileAction;
 }
 
+/// Decider that always skips existing files.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SkipExisting;
 
@@ -52,19 +67,27 @@ impl ExistingFileDecider for SkipExisting {
     }
 }
 
+/// Options that control template application.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ApplyOptions {
+    /// When true, compute changes but do not write to disk.
     pub dry_run: bool,
 }
 
+/// Summary of work performed during template application.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ApplyReport {
+    /// Files created because they did not exist in the destination.
     pub created_files: usize,
+    /// Files updated after an overwrite or merge action.
     pub updated_files: usize,
+    /// Files skipped due to identical contents or a skip decision.
     pub skipped_files: usize,
+    /// Paths ignored by destination gitignore rules.
     pub ignored_paths: usize,
 }
 
+/// Errors that can occur when applying a template directory.
 #[derive(Debug)]
 pub enum ApplyError {
     TemplateDirNotFound(PathBuf),
@@ -105,6 +128,19 @@ impl std::error::Error for ApplyError {
     }
 }
 
+/// Apply an entire template directory into a destination directory.
+///
+/// This function walks the template tree, respects destination ignore rules, and
+/// asks the provided decider what to do when existing files differ.
+///
+/// # Examples
+/// ```no_run
+/// use pinit_core::{apply_template_dir, ApplyOptions, SkipExisting};
+///
+/// let mut decider = SkipExisting::default();
+/// let options = ApplyOptions { dry_run: true };
+/// let _report = apply_template_dir("templates/rust", ".", options, &mut decider).unwrap();
+/// ```
 #[instrument(skip(options, decider), fields(template_dir = %template_dir.as_ref().display(), dest_dir = %dest_dir.as_ref().display(), dry_run = options.dry_run))]
 pub fn apply_template_dir(
     template_dir: impl AsRef<Path>,
@@ -154,6 +190,19 @@ pub fn apply_template_dir(
     Ok(report)
 }
 
+/// Apply a generated file into the destination directory.
+///
+/// Generated files bypass merge drivers; if the destination exists the decider
+/// can choose to overwrite or skip.
+///
+/// # Examples
+/// ```no_run
+/// use pinit_core::{apply_generated_file, ApplyOptions, SkipExisting};
+///
+/// let mut decider = SkipExisting::default();
+/// let options = ApplyOptions { dry_run: true };
+/// let _report = apply_generated_file(".", "LICENSE", b"MIT\n", options, &mut decider).unwrap();
+/// ```
 #[instrument(skip(options, decider, contents), fields(dest_dir = %dest_dir.as_ref().display(), rel_path = %rel_path.as_ref().display(), dry_run = options.dry_run))]
 pub fn apply_generated_file(
     dest_dir: impl AsRef<Path>,

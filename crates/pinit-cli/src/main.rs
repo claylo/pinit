@@ -3,105 +3,11 @@
 use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 
-use clap::{ArgAction, Args, CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser};
+use pinit_cli::{ApplyArgs, Cli, Command, NewArgs};
 use pinit_core::{ExistingFileAction, ExistingFileDecider, ExistingFileDecisionContext};
 use similar::TextDiff;
 use tracing_subscriber::EnvFilter;
-
-#[derive(Parser, Debug)]
-#[command(name = "pinit")]
-#[command(about = "Apply project template baselines", long_about = None)]
-struct Cli {
-    /// Increase verbosity (-v, -vv, -vvv)
-    #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
-    verbose: u8,
-
-    /// Config file path (overrides default discovery)
-    #[arg(long = "config", global = true)]
-    config: Option<PathBuf>,
-
-    #[command(subcommand)]
-    command: Option<Command>,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// Apply a template directory into a destination directory
-    Apply(ApplyArgs),
-
-    /// List available recipes/templates
-    List,
-
-    /// Create a new project directory from a recipe/template
-    New(NewArgs),
-}
-
-#[derive(Args, Debug)]
-struct ApplyArgs {
-    /// Template/recipe name from config, or a path to a template directory
-    template: String,
-
-    /// Destination directory (default: current directory)
-    dest_dir: Option<PathBuf>,
-
-    /// Print what would change without writing
-    #[arg(short = 'n', long = "dry-run")]
-    dry_run: bool,
-
-    /// Non-interactive; apply the selected behavior to all files
-    #[arg(short = 'y', long = "yes")]
-    yes: bool,
-
-    /// When a file exists, overwrite it
-    #[arg(long, conflicts_with_all = ["merge", "skip"])]
-    overwrite: bool,
-
-    /// When a file exists, attempt an additive merge (default)
-    #[arg(long, conflicts_with_all = ["overwrite", "skip"])]
-    merge: bool,
-
-    /// When a file exists, skip it
-    #[arg(long, conflicts_with_all = ["overwrite", "merge"])]
-    skip: bool,
-}
-
-#[derive(Args, Debug)]
-struct NewArgs {
-    template: String,
-    dir: PathBuf,
-
-    /// Print what would change without writing
-    #[arg(short = 'n', long = "dry-run")]
-    dry_run: bool,
-
-    /// Non-interactive; apply the selected behavior to all files
-    #[arg(short = 'y', long = "yes")]
-    yes: bool,
-
-    /// When a file exists, overwrite it
-    #[arg(long, conflicts_with_all = ["merge", "skip"])]
-    overwrite: bool,
-
-    /// When a file exists, attempt an additive merge (default)
-    #[arg(long, conflicts_with_all = ["overwrite", "skip"])]
-    merge: bool,
-
-    /// When a file exists, skip it
-    #[arg(long, conflicts_with_all = ["overwrite", "merge"])]
-    skip: bool,
-
-    /// Initialize a git repository (default: on)
-    #[arg(long = "git", action = ArgAction::SetTrue, conflicts_with = "no_git")]
-    git: bool,
-
-    /// Do not initialize a git repository
-    #[arg(long = "no-git", action = ArgAction::SetTrue)]
-    no_git: bool,
-
-    /// Initial branch name (default: main)
-    #[arg(long = "branch", default_value = "main")]
-    branch: String,
-}
 
 fn main() {
     let cli = Cli::parse();

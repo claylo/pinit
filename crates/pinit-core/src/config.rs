@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+//! Configuration loading and resolution for pinit.
+//!
+//! Supports TOML and YAML configuration files discovered via `~/.config/pinit.*`
+//! or a user-provided override path.
+
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt;
@@ -11,6 +16,7 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use tracing::{debug, instrument};
 
+/// Parsed configuration file contents.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Config {
     pub common: Option<String>,
@@ -30,6 +36,7 @@ pub struct Config {
     pub recipes: BTreeMap<String, RecipeDef>,
 }
 
+/// License configuration for optional SPDX rendering.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum LicenseDef {
@@ -70,6 +77,7 @@ impl LicenseDef {
     }
 }
 
+/// Detailed SPDX license configuration and template arguments.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct LicenseDetailed {
     /// SPDX license identifier, e.g. `MIT`, `Apache-2.0`.
@@ -89,6 +97,7 @@ pub struct LicenseDetailed {
     pub args: BTreeMap<String, String>,
 }
 
+/// Template source definition (local path or git repository).
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Source {
     pub name: String,
@@ -102,6 +111,7 @@ pub struct Source {
     pub subdir: Option<PathBuf>,
 }
 
+/// Template definition that resolves to a directory.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum TemplateDef {
@@ -125,6 +135,7 @@ impl TemplateDef {
     }
 }
 
+/// Recipe definition made of template names and/or file sets.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct RecipeDef {
     #[serde(default)]
@@ -134,6 +145,7 @@ pub struct RecipeDef {
     pub files: Vec<FileSetDef>,
 }
 
+/// File set definition for inline recipes.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct FileSetDef {
     pub root: PathBuf,
@@ -144,6 +156,7 @@ pub struct FileSetDef {
     pub dest_prefix: Option<PathBuf>,
 }
 
+/// Recipe resolved to concrete template names and file sets.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedRecipe {
     pub name: String,
@@ -151,6 +164,7 @@ pub struct ResolvedRecipe {
     pub files: Vec<FileSetDef>,
 }
 
+/// Errors encountered while loading configuration.
 #[derive(Debug)]
 pub enum ConfigError {
     NotFound,
@@ -182,6 +196,7 @@ impl std::error::Error for ConfigError {
     }
 }
 
+/// Default configuration search paths in priority order.
 pub fn default_config_paths() -> Vec<PathBuf> {
     let mut out = Vec::new();
 
@@ -204,6 +219,7 @@ pub fn default_config_paths() -> Vec<PathBuf> {
     out
 }
 
+/// Load configuration from disk, optionally overriding the discovery path.
 pub fn load_config(path_override: Option<&Path>) -> Result<(PathBuf, Config), ConfigError> {
     if let Some(path) = path_override {
         debug!(path = %path.display(), "config: load override");
@@ -412,6 +428,7 @@ fn yaml_to_license(y: &rust_yaml::Value) -> Option<LicenseDef> {
 }
 
 impl Config {
+    /// Resolve a recipe/target/template name into concrete templates and file sets.
     pub fn resolve_recipe(&self, name: &str) -> Option<ResolvedRecipe> {
         if let Some(def) = self.recipes.get(name) {
             return Some(ResolvedRecipe { name: name.to_string(), templates: def.templates.clone(), files: def.files.clone() });

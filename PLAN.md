@@ -213,8 +213,9 @@ Diff output:
 ### Phase 8: Documentation
 - Update `README.md` to document CLI + config examples.
 - Add a “how to validate” checklist (or CI for the CLI itself).
-- Add a just recipe for generating `man pinit` documentation. Use whatever means is easiest, explore Pandoc as an option
-- Add a just recipe for `just local-smoke` that installs the build target cli in `~/.bin` for testing outside of the cargo environment.
+- Add comprehensive inline documentation and examples in the source code.
+- Use `cargo xtask` with the `clap_mangen` crate to add a workflow for building a manpage
+- Add a `cargo xtask` that installs the build target cli in `~/.bin` for testing outside of the development environment.
 
 ### Phase 9: Release automation (release-plz)
 - Set up release automation for *this repo* (not just the generated templates):

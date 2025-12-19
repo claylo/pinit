@@ -1,11 +1,95 @@
 # pinit
+> just-over-engineered-enough **p**roject **init**ialization
 
-`pinit` is a new project "generator" for lazy-yet-detail-oriented people like myself.
+`pinit` applies project template baselines to existing (or non-existent) directories.
 
+## Quick start
+
+```sh
+# list configured templates/recipes
+pinit list
+
+# apply a template or recipe into the current directory
+pinit apply rust
+
+# create a new directory, init git, and apply a template
+pinit new rust myproj
+```
+
+## Usage
+
+```text
+pinit apply <template|path> [dest] [--dry-run] [--yes] [--overwrite|--merge|--skip]
+pinit new <template|path> <dir> [--dry-run] [--yes] [--no-git] [--branch main]
+pinit list
+```
+
+Notes:
+- `--dry-run` computes changes without writing.
+- `--yes` makes the run non-interactive (default action is merge when available).
+- The selected action handles existing files: overwrite, additive merge, or skip.
+- Destination gitignore rules are honored to avoid copying ignored files.
+
+## Configuration
+
+`pinit` loads config from `~/.config/pinit.toml` or `~/.config/pinit.yaml` (or `--config <path>`).
+
+TOML example:
+```toml
+common = "common"
+
+[[sources]]
+name = "local"
+path = "/Users/me/src/pinit/templates"
+
+[templates]
+common = { source = "local", path = "common" }
+rust = { source = "local", path = "rust" }
+
+[targets]
+rust = ["common", "rust"]
+
+[recipes.rust-lite]
+templates = ["rust"]
+```
+
+YAML example:
+```yaml
+common: common
+sources:
+  - name: local
+    path: /Users/me/src/pinit/templates
+templates:
+  common: { source: local, path: common }
+  rust: { source: local, path: rust }
+targets:
+  rust: [common, rust]
+recipes:
+  rust-lite:
+    templates: [rust]
+```
+
+## Validation
+
+```sh
+just check
+just test
+just cov
+```
+
+## Xtask
+
+```sh
+# build a manpage into target/man
+cargo xtask man
+
+# build and install the CLI into ~/.bin
+cargo xtask install
+```
 
 ## Prior Art
 
-It's not like I'm the first to say, "hey, starting a new project should suck less!" So why `newbie` and not just one of the other approaches? Well...
+It's not like I'm the first to say, "hey, starting a new project should suck less!" So why `pinit` and not just one of the other approaches? Well...
 
 ### What about Yeoman?
 
@@ -17,9 +101,9 @@ I've always wanted to love [Yeoman](https://yeoman.io), and it's an excellent fi
 
 Read the [documentation on template directories](https://git-scm.com/docs/git-init#_template_directory), and you'll see the problem with `git init`. (Emphasis mine.)
 
-> Files and directories in the template directory whose name **do not start with a dot** will be copied
+> Files and directories in the template directory whose names **do not start with a dot** will be copied
 
-How many *useful* template repositories would not contain file names beginning with a dot? :thinking:
+How many *useful* template repositories would *not* contain file names beginning with a dot? :thinking:
 
 ### GitHub Repository Templates?
 
@@ -35,6 +119,4 @@ But:
 IKR? So crazy. :roll_eyes:
 
 No, really: A whole bunch of folks use [Subversion](https://subversion.apache.org/). There's a thing called [Piper](https://cacm.acm.org/magazines/2016/7/204032-why-google-stores-billions-of-lines-of-code-in-a-single-repository/fulltext) that houses a gazillion lines of code. There's Perforce, Mercurial, and ... look at [this list](https://en.wikipedia.org/wiki/Comparison_of_version-control_software).
-
-
 

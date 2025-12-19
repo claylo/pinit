@@ -1,5 +1,10 @@
 #![forbid(unsafe_code)]
 
+//! Template source resolution for pinit.
+//!
+//! Resolves template names into local paths, fetching git sources into a cache
+//! directory when needed.
+
 use std::ffi::OsStr;
 use std::fmt;
 use std::fs;
@@ -11,6 +16,7 @@ use crate::config::{Config, TemplateDef};
 
 use tracing::{debug, instrument};
 
+/// Errors encountered while resolving template sources.
 #[derive(Debug)]
 pub enum ResolveError {
     NoHomeDir,
@@ -49,6 +55,7 @@ impl std::error::Error for ResolveError {
     }
 }
 
+/// Resolver for template directories with optional git-backed sources.
 #[derive(Clone, Debug)]
 pub struct TemplateResolver {
     cache_dir: PathBuf,
@@ -60,14 +67,17 @@ impl TemplateResolver {
         Ok(Self { cache_dir: base.cache_dir().join("pinit") })
     }
 
+    /// Create a resolver using an explicit cache directory.
     pub fn new(cache_dir: PathBuf) -> Self {
         Self { cache_dir }
     }
 
+    /// Return the cache directory path.
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir
     }
 
+    /// Resolve a recipe name to a list of template directories.
     pub fn resolve_recipe_template_dirs(&self, cfg: &Config, recipe_or_template: &str) -> Result<Vec<PathBuf>, ResolveError> {
         let resolved = cfg
             .resolve_recipe(recipe_or_template)
@@ -82,6 +92,7 @@ impl TemplateResolver {
     }
 
     #[instrument(skip_all, fields(template = template_name))]
+    /// Resolve a single template name to its directory on disk.
     pub fn resolve_template_dir(&self, cfg: &Config, template_name: &str) -> Result<PathBuf, ResolveError> {
         let def = cfg
             .templates
@@ -221,6 +232,7 @@ fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
     Ok(())
 }
 
+/// Return true if the path appears to be a git repository checkout.
 pub fn path_is_git_dir(path: &Path) -> bool {
     path.join(".git").is_dir() || (path.file_name() == Some(OsStr::new(".git")))
 }
