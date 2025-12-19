@@ -2,6 +2,7 @@
 # Keep this file small. If it starts feeling like a novel, you’re doing it wrong. 🙂
 
 [alias]
+xtask = "run --package xtask --"
 # Quality-of-life
 b = "build"
 c = "check"
