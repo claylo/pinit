@@ -23,6 +23,10 @@ fn main() {
         Command::Apply(args) => cmd_apply(cli.config.as_deref(), args),
         Command::List => cmd_list(cli.config.as_deref()),
         Command::New(args) => cmd_new(cli.config.as_deref(), args),
+        Command::Version => {
+            println!("pinit {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
     };
 
     if let Err(message) = result {

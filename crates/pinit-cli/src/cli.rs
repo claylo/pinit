@@ -5,6 +5,7 @@ use clap::{ArgAction, Args, Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(name = "pinit")]
 #[command(about = "Apply project template baselines", long_about = None)]
+#[command(version)]
 pub struct Cli {
     /// Increase verbosity (-v, -vv, -vvv)
     #[arg(short = 'v', long = "verbose", action = ArgAction::Count, global = true)]
@@ -28,6 +29,9 @@ pub enum Command {
 
     /// Create a new project directory from a recipe/template
     New(NewArgs),
+
+    /// Print the CLI version
+    Version,
 }
 
 #[derive(Args, Debug)]

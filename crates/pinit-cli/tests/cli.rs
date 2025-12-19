@@ -543,6 +543,22 @@ fn verbose_flag_debug_level_path_is_reachable() {
 }
 
 #[test]
+fn version_subcommand_prints_version() {
+    let out = pinit().arg("version").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn version_flag_prints_version() {
+    let out = pinit().arg("--version").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn apply_interactive_default_merge_appends_missing_lines() {
     let root = make_temp_root();
     let template_dir = root.join("template");
