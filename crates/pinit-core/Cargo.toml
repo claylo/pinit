@@ -16,7 +16,7 @@ rust-yaml = "0.0.5"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.9.10"
 tracing = { version = "0.1.44", features = ["attributes"] }
-toml_edit = "0.22.27"
+toml_edit = "0.24.0"
 tree-sitter = "0.26.3"
 tree-sitter-rust = "0.24.0"
 tree-sitter-bash = "0.25.1"
