@@ -45,7 +45,11 @@ fn main() -> Result<(), String> {
 
 fn workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir.parent().unwrap_or(&manifest_dir).to_path_buf()
+    manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .unwrap_or(&manifest_dir)
+        .to_path_buf()
 }
 
 fn generate_manpage(out_dir: &Path) -> Result<(), String> {
