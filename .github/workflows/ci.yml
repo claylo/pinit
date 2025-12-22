@@ -29,7 +29,10 @@ jobs:
           components: rustfmt, clippy
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          cache-key-suffix: lint
+          toolchain: stable
 
       - name: rustfmt
         run: cargo fmt --check
@@ -49,11 +52,16 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Install nextest
-        uses: taiki-e/install-action@90a1ef46adc2666f004dc81d4aff80644051e760 # nextest
-
       - name: Rust cache
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          cache-key-suffix: test
+          toolchain: stable
+
+      - name: Install nextest
+        uses: ./.github/actions/setup-cargo-tools
+        with:
+          tools: cargo-nextest
 
       - name: nextest
         run: cargo nextest run --profile ci
@@ -104,7 +112,10 @@ jobs:
 
       - name: Rust cache
         if: steps.msrv.outputs.found == 'true'
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2
+        uses: ./.github/actions/setup-rust-cache
+        with:
+          cache-key-suffix: msrv
+          toolchain: ${{ steps.msrv.outputs.msrv }}
 
       - name: cargo check (MSRV)
         if: steps.msrv.outputs.found == 'true'
@@ -113,6 +124,8 @@ jobs:
   semver:
     name: Semver check
     runs-on: ubuntu-latest
+    # only run if there is a version tag in the repo
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
