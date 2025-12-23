@@ -9,7 +9,10 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 fn make_temp_root() -> TempRoot {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-apply-merge-treesitter-test-{}-{n}", std::process::id()));
+    path.push(format!(
+        "pinit-apply-merge-treesitter-test-{}-{n}",
+        std::process::id()
+    ));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -126,7 +129,11 @@ fn merge_php_inserts_use_after_namespace_and_appends_functions() {
 
 #[test]
 fn merge_css_appends_missing_rules() {
-    let out = run_merge("styles.css", ".a { color: red; }\n", ".b { color: blue; }\n");
+    let out = run_merge(
+        "styles.css",
+        ".a { color: red; }\n",
+        ".b { color: blue; }\n",
+    );
     assert!(out.contains(".a { color: red; }"));
     assert!(out.contains(".b { color: blue; }"));
 }
@@ -157,14 +164,22 @@ fn merge_html_appends_missing_assets() {
 
 #[test]
 fn merge_bash_appends_missing_function() {
-    let out = run_merge("script.sh", "foo() { echo foo; }\n", "bar() { echo bar; }\n");
+    let out = run_merge(
+        "script.sh",
+        "foo() { echo foo; }\n",
+        "bar() { echo bar; }\n",
+    );
     assert!(out.contains("foo()"));
     assert!(out.contains("bar()"));
 }
 
 #[test]
 fn merge_zsh_appends_missing_function() {
-    let out = run_merge("script.zsh", "foo() { echo foo; }\n", "bar() { echo bar; }\n");
+    let out = run_merge(
+        "script.zsh",
+        "foo() { echo foo; }\n",
+        "bar() { echo bar; }\n",
+    );
     assert!(out.contains("foo()"));
     assert!(out.contains("bar()"));
 }
@@ -186,4 +201,3 @@ fn merge_ruby_appends_missing_class() {
     assert!(out.contains("class Foo"));
     assert!(out.contains("class Bar"));
 }
-

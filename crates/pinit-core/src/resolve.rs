@@ -23,10 +23,21 @@ pub enum ResolveError {
     UnknownTemplate(String),
     UnknownSource(String),
     TemplatePathNotDir(PathBuf),
-    SourcePathMissing { source: String },
-    SourceRepoMissing { source: String },
-    GitCommandFailed { cmd: String, status: i32, stderr: String },
-    Io { path: PathBuf, source: io::Error },
+    SourcePathMissing {
+        source: String,
+    },
+    SourceRepoMissing {
+        source: String,
+    },
+    GitCommandFailed {
+        cmd: String,
+        status: i32,
+        stderr: String,
+    },
+    Io {
+        path: PathBuf,
+        source: io::Error,
+    },
 }
 
 impl fmt::Display for ResolveError {
@@ -35,10 +46,20 @@ impl fmt::Display for ResolveError {
             ResolveError::NoHomeDir => write!(f, "could not determine a cache directory"),
             ResolveError::UnknownTemplate(name) => write!(f, "unknown template: {name}"),
             ResolveError::UnknownSource(name) => write!(f, "unknown template source: {name}"),
-            ResolveError::TemplatePathNotDir(path) => write!(f, "template path is not a directory: {}", path.display()),
-            ResolveError::SourcePathMissing { source } => write!(f, "source '{source}' is missing 'path'"),
-            ResolveError::SourceRepoMissing { source } => write!(f, "source '{source}' is missing 'repo'"),
-            ResolveError::GitCommandFailed { cmd, status, stderr } => {
+            ResolveError::TemplatePathNotDir(path) => {
+                write!(f, "template path is not a directory: {}", path.display())
+            }
+            ResolveError::SourcePathMissing { source } => {
+                write!(f, "source '{source}' is missing 'path'")
+            }
+            ResolveError::SourceRepoMissing { source } => {
+                write!(f, "source '{source}' is missing 'repo'")
+            }
+            ResolveError::GitCommandFailed {
+                cmd,
+                status,
+                stderr,
+            } => {
                 write!(f, "git failed ({status}) running {cmd}: {stderr}")
             }
             ResolveError::Io { path, source } => write!(f, "{}: {}", path.display(), source),
@@ -64,7 +85,9 @@ pub struct TemplateResolver {
 impl TemplateResolver {
     pub fn with_default_cache() -> Result<Self, ResolveError> {
         let base = directories::BaseDirs::new().ok_or(ResolveError::NoHomeDir)?;
-        Ok(Self { cache_dir: base.cache_dir().join("pinit") })
+        Ok(Self {
+            cache_dir: base.cache_dir().join("pinit"),
+        })
     }
 
     /// Create a resolver using an explicit cache directory.
@@ -78,12 +101,20 @@ impl TemplateResolver {
     }
 
     /// Resolve a recipe name to a list of template directories.
-    pub fn resolve_recipe_template_dirs(&self, cfg: &Config, recipe_or_template: &str) -> Result<Vec<PathBuf>, ResolveError> {
+    pub fn resolve_recipe_template_dirs(
+        &self,
+        cfg: &Config,
+        recipe_or_template: &str,
+    ) -> Result<Vec<PathBuf>, ResolveError> {
         let resolved = cfg
             .resolve_recipe(recipe_or_template)
             .ok_or_else(|| ResolveError::UnknownTemplate(recipe_or_template.to_string()))?;
 
-        debug!(name = recipe_or_template, templates = resolved.templates.len(), "resolve recipe");
+        debug!(
+            name = recipe_or_template,
+            templates = resolved.templates.len(),
+            "resolve recipe"
+        );
         let mut out = Vec::new();
         for name in resolved.templates {
             out.push(self.resolve_template_dir(cfg, &name)?);
@@ -93,7 +124,11 @@ impl TemplateResolver {
 
     #[instrument(skip_all, fields(template = template_name))]
     /// Resolve a single template name to its directory on disk.
-    pub fn resolve_template_dir(&self, cfg: &Config, template_name: &str) -> Result<PathBuf, ResolveError> {
+    pub fn resolve_template_dir(
+        &self,
+        cfg: &Config,
+        template_name: &str,
+    ) -> Result<PathBuf, ResolveError> {
         let def = cfg
             .templates
             .get(template_name)
@@ -104,7 +139,12 @@ impl TemplateResolver {
         Ok(path)
     }
 
-    fn resolve_template_def(&self, cfg: &Config, template_name: &str, def: &TemplateDef) -> Result<PathBuf, ResolveError> {
+    fn resolve_template_def(
+        &self,
+        cfg: &Config,
+        template_name: &str,
+        def: &TemplateDef,
+    ) -> Result<PathBuf, ResolveError> {
         let path = def.path();
         if path.is_absolute() {
             debug!(template = template_name, path = %path.display(), "resolve absolute");
@@ -129,7 +169,9 @@ impl TemplateResolver {
         }
 
         let Some(repo) = &source.repo else {
-            return Err(ResolveError::SourceRepoMissing { source: source.name.clone() });
+            return Err(ResolveError::SourceRepoMissing {
+                source: source.name.clone(),
+            });
         };
         let git_ref = source.git_ref.as_deref().unwrap_or("HEAD");
         debug!(template = template_name, source = source_name, repo = %repo, git_ref = %git_ref, "resolve git");
@@ -147,19 +189,34 @@ impl TemplateResolver {
         let repo_dir = self.cache_dir.join("repos").join(key).join("repo");
 
         if !repo_dir.exists() {
-            fs::create_dir_all(repo_dir.parent().unwrap())
-                .map_err(|e| ResolveError::Io { path: repo_dir.clone(), source: e })?;
+            fs::create_dir_all(repo_dir.parent().unwrap()).map_err(|e| ResolveError::Io {
+                path: repo_dir.clone(),
+                source: e,
+            })?;
             debug!(repo = %repo, dest = %repo_dir.display(), "git clone");
             git(&["clone", repo, repo_dir.to_string_lossy().as_ref()], None)?;
         } else {
             // Best-effort update.
             debug!(repo = %repo, dest = %repo_dir.display(), "git fetch");
-            let _ = git(&["-C", repo_dir.to_string_lossy().as_ref(), "fetch", "--tags", "--prune", "origin"], None);
+            let _ = git(
+                &[
+                    "-C",
+                    repo_dir.to_string_lossy().as_ref(),
+                    "fetch",
+                    "--tags",
+                    "--prune",
+                    "origin",
+                ],
+                None,
+            );
         }
 
         // Check out the requested ref in a detached HEAD state. If `ref` is a branch name,
         // try `origin/<ref>` as a fallback.
-        if git_checkout_detach(&repo_dir, git_ref).is_err() && !git_ref.contains('/') && !looks_like_hex(git_ref) {
+        if git_checkout_detach(&repo_dir, git_ref).is_err()
+            && !git_ref.contains('/')
+            && !looks_like_hex(git_ref)
+        {
             let origin_ref = format!("origin/{git_ref}");
             git_checkout_detach(&repo_dir, &origin_ref)?;
         }
@@ -195,7 +252,7 @@ fn looks_like_hex(s: &str) -> bool {
     if s.len() < 7 {
         return false;
     }
-    s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F'))
+    s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn git(args: &[&str], cwd: Option<&Path>) -> Result<(), ResolveError> {
@@ -205,13 +262,20 @@ fn git(args: &[&str], cwd: Option<&Path>) -> Result<(), ResolveError> {
         cmd.current_dir(cwd);
     }
     debug!(cmd = %format!("git {}", args.join(" ")), "run");
-    let out = cmd.output().map_err(|e| ResolveError::Io { path: PathBuf::from("git"), source: e })?;
+    let out = cmd.output().map_err(|e| ResolveError::Io {
+        path: PathBuf::from("git"),
+        source: e,
+    })?;
     if out.status.success() {
         return Ok(());
     }
     let status = out.status.code().unwrap_or(1);
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    Err(ResolveError::GitCommandFailed { cmd: format!("git {}", args.join(" ")), status, stderr })
+    Err(ResolveError::GitCommandFailed {
+        cmd: format!("git {}", args.join(" ")),
+        status,
+        stderr,
+    })
 }
 
 fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
@@ -219,7 +283,10 @@ fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
         if e.kind() == io::ErrorKind::NotFound {
             ResolveError::TemplatePathNotDir(path.to_path_buf())
         } else {
-            ResolveError::Io { path: path.to_path_buf(), source: e }
+            ResolveError::Io {
+                path: path.to_path_buf(),
+                source: e,
+            }
         }
     })?;
 

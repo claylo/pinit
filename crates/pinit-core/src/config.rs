@@ -65,11 +65,14 @@ impl LicenseDef {
             LicenseDef::Detailed(d) => {
                 let mut args = d.args.clone();
                 if let Some(year) = d.year.as_deref() {
-                    args.entry("year".to_string()).or_insert_with(|| year.to_string());
+                    args.entry("year".to_string())
+                        .or_insert_with(|| year.to_string());
                 }
                 if let Some(name) = d.name.as_deref() {
-                    args.entry("fullname".to_string()).or_insert_with(|| name.to_string());
-                    args.entry("copyright holders".to_string()).or_insert_with(|| name.to_string());
+                    args.entry("fullname".to_string())
+                        .or_insert_with(|| name.to_string());
+                    args.entry("copyright holders".to_string())
+                        .or_insert_with(|| name.to_string());
                 }
                 args
             }
@@ -116,7 +119,10 @@ pub struct Source {
 #[serde(untagged)]
 pub enum TemplateDef {
     Path(PathBuf),
-    Detailed { source: Option<String>, path: PathBuf },
+    Detailed {
+        source: Option<String>,
+        path: PathBuf,
+    },
 }
 
 impl TemplateDef {
@@ -168,10 +174,21 @@ pub struct ResolvedRecipe {
 #[derive(Debug)]
 pub enum ConfigError {
     NotFound,
-    Io { path: PathBuf, source: io::Error },
-    ParseToml { path: PathBuf, source: toml::de::Error },
-    ParseYaml { path: PathBuf, message: String },
-    YamlRootNotMapping { path: PathBuf },
+    Io {
+        path: PathBuf,
+        source: io::Error,
+    },
+    ParseToml {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+    ParseYaml {
+        path: PathBuf,
+        message: String,
+    },
+    YamlRootNotMapping {
+        path: PathBuf,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -180,8 +197,12 @@ impl fmt::Display for ConfigError {
             ConfigError::NotFound => write!(f, "no config file found"),
             ConfigError::Io { path, source } => write!(f, "{}: {}", path.display(), source),
             ConfigError::ParseToml { path, source } => write!(f, "{}: {}", path.display(), source),
-            ConfigError::ParseYaml { path, message } => write!(f, "{}: {}", path.display(), message),
-            ConfigError::YamlRootNotMapping { path } => write!(f, "{}: YAML root must be a mapping", path.display()),
+            ConfigError::ParseYaml { path, message } => {
+                write!(f, "{}: {}", path.display(), message)
+            }
+            ConfigError::YamlRootNotMapping { path } => {
+                write!(f, "{}: YAML root must be a mapping", path.display())
+            }
         }
     }
 }
@@ -238,8 +259,15 @@ pub fn load_config(path_override: Option<&Path>) -> Result<(PathBuf, Config), Co
 
 #[instrument(skip_all, fields(path = %path.display()))]
 fn load_config_at(path: &Path) -> Result<(PathBuf, Config), ConfigError> {
-    let content = fs::read_to_string(path).map_err(|e| ConfigError::Io { path: path.to_path_buf(), source: e })?;
-    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let content = fs::read_to_string(path).map_err(|e| ConfigError::Io {
+        path: path.to_path_buf(),
+        source: e,
+    })?;
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
 
     let config = match ext.as_str() {
         "toml" => parse_toml(path, &content)?,
@@ -257,7 +285,10 @@ fn load_config_at(path: &Path) -> Result<(PathBuf, Config), ConfigError> {
 }
 
 fn parse_toml(path: &Path, s: &str) -> Result<Config, ConfigError> {
-    toml::from_str::<Config>(s).map_err(|e| ConfigError::ParseToml { path: path.to_path_buf(), source: e })
+    toml::from_str::<Config>(s).map_err(|e| ConfigError::ParseToml {
+        path: path.to_path_buf(),
+        source: e,
+    })
 }
 
 fn parse_yaml(path: &Path, s: &str) -> Result<Config, ConfigError> {
@@ -265,75 +296,115 @@ fn parse_yaml(path: &Path, s: &str) -> Result<Config, ConfigError> {
     //
     // This is a minimal parser that supports the subset of YAML we need for config.
     let yaml = rust_yaml::Yaml::new();
-    let doc = yaml
-        .load_str(s)
-        .map_err(|e| ConfigError::ParseYaml { path: path.to_path_buf(), message: e.to_string() })?;
+    let doc = yaml.load_str(s).map_err(|e| ConfigError::ParseYaml {
+        path: path.to_path_buf(),
+        message: e.to_string(),
+    })?;
 
     yaml_to_config(path, &doc)
 }
 
 fn yaml_to_config(path: &Path, root: &rust_yaml::Value) -> Result<Config, ConfigError> {
     let rust_yaml::Value::Mapping(map) = root else {
-        return Err(ConfigError::YamlRootNotMapping { path: path.to_path_buf() });
+        return Err(ConfigError::YamlRootNotMapping {
+            path: path.to_path_buf(),
+        });
     };
 
-    let mut cfg = Config::default();
-
-    cfg.common = yaml_get_string(map, "common");
-
-    cfg.license = yaml_get(map, "license").and_then(|v| yaml_to_license(v));
+    let mut cfg = Config {
+        common: yaml_get_string(map, "common"),
+        license: yaml_get(map, "license").and_then(yaml_to_license),
+        ..Config::default()
+    };
 
     if let Some(sources) = yaml_get_seq(map, "sources") {
         for source in sources {
-            let Some(source_map) = yaml_as_mapping(source) else { continue };
-            let Some(name) = yaml_get_string(source_map, "name") else { continue };
+            let Some(source_map) = yaml_as_mapping(source) else {
+                continue;
+            };
+            let Some(name) = yaml_get_string(source_map, "name") else {
+                continue;
+            };
             let path_val = yaml_get_string(source_map, "path").map(PathBuf::from);
             let repo = yaml_get_string(source_map, "repo");
             let git_ref = yaml_get_string(source_map, "ref");
             let subdir = yaml_get_string(source_map, "subdir").map(PathBuf::from);
-            cfg.sources.push(Source { name, path: path_val, repo, git_ref, subdir });
+            cfg.sources.push(Source {
+                name,
+                path: path_val,
+                repo,
+                git_ref,
+                subdir,
+            });
         }
     }
 
     if let Some(templates_root) = yaml_get(map, "templates").and_then(yaml_as_mapping) {
         for (k, v) in templates_root {
-            let Some(name) = yaml_as_string(k) else { continue };
+            let Some(name) = yaml_as_string(k) else {
+                continue;
+            };
 
             if let Some(path_str) = yaml_as_string(v) {
-                cfg.templates.insert(name, TemplateDef::Path(PathBuf::from(path_str)));
+                cfg.templates
+                    .insert(name, TemplateDef::Path(PathBuf::from(path_str)));
                 continue;
             }
 
             if let Some(d) = yaml_as_mapping(v) {
                 let source = yaml_get_string(d, "source");
-                let Some(path_str) = yaml_get_string(d, "path") else { continue };
-                cfg.templates.insert(name, TemplateDef::Detailed { source, path: PathBuf::from(path_str) });
+                let Some(path_str) = yaml_get_string(d, "path") else {
+                    continue;
+                };
+                cfg.templates.insert(
+                    name,
+                    TemplateDef::Detailed {
+                        source,
+                        path: PathBuf::from(path_str),
+                    },
+                );
             }
         }
     }
 
     if let Some(targets_root) = yaml_get(map, "targets").and_then(yaml_as_mapping) {
         for (k, v) in targets_root {
-            let Some(name) = yaml_as_string(k) else { continue };
-            let Some(items) = yaml_as_vec_of_strings(v) else { continue };
+            let Some(name) = yaml_as_string(k) else {
+                continue;
+            };
+            let Some(items) = yaml_as_vec_of_strings(v) else {
+                continue;
+            };
             cfg.targets.insert(name, items);
         }
     }
 
     if let Some(recipes_root) = yaml_get(map, "recipes").and_then(yaml_as_mapping) {
         for (k, v) in recipes_root {
-            let Some(name) = yaml_as_string(k) else { continue };
-            let Some(recipe_map) = yaml_as_mapping(v) else { continue };
+            let Some(name) = yaml_as_string(k) else {
+                continue;
+            };
+            let Some(recipe_map) = yaml_as_mapping(v) else {
+                continue;
+            };
 
             let templates = yaml_get_vec_of_strings(recipe_map, "templates").unwrap_or_default();
             let mut files = Vec::new();
             if let Some(files_seq) = yaml_get_seq(recipe_map, "files") {
                 for fs_item in files_seq {
-                    let Some(fs_map) = yaml_as_mapping(fs_item) else { continue };
-                    let Some(root) = yaml_get_string(fs_map, "root").map(PathBuf::from) else { continue };
+                    let Some(fs_map) = yaml_as_mapping(fs_item) else {
+                        continue;
+                    };
+                    let Some(root) = yaml_get_string(fs_map, "root").map(PathBuf::from) else {
+                        continue;
+                    };
                     let include = yaml_get_vec_of_strings(fs_map, "include").unwrap_or_default();
                     let dest_prefix = yaml_get_string(fs_map, "dest_prefix").map(PathBuf::from);
-                    files.push(FileSetDef { root, include, dest_prefix });
+                    files.push(FileSetDef {
+                        root,
+                        include,
+                        dest_prefix,
+                    });
                 }
             }
 
@@ -350,22 +421,34 @@ fn yaml_key(s: &str) -> rust_yaml::Value {
     rust_yaml::Value::String(s.to_string())
 }
 
-fn yaml_get<'a>(map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>, key: &str) -> Option<&'a rust_yaml::Value> {
+fn yaml_get<'a>(
+    map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>,
+    key: &str,
+) -> Option<&'a rust_yaml::Value> {
     map.get(&yaml_key(key))
 }
 
-fn yaml_get_seq<'a>(map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>, key: &str) -> Option<&'a Vec<rust_yaml::Value>> {
+fn yaml_get_seq<'a>(
+    map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>,
+    key: &str,
+) -> Option<&'a Vec<rust_yaml::Value>> {
     yaml_get(map, key).and_then(|v| match v {
         rust_yaml::Value::Sequence(seq) => Some(seq),
         _ => None,
     })
 }
 
-fn yaml_get_string(map: &IndexMap<rust_yaml::Value, rust_yaml::Value>, key: &str) -> Option<String> {
+fn yaml_get_string(
+    map: &IndexMap<rust_yaml::Value, rust_yaml::Value>,
+    key: &str,
+) -> Option<String> {
     yaml_get(map, key).and_then(yaml_as_string)
 }
 
-fn yaml_get_vec_of_strings(map: &IndexMap<rust_yaml::Value, rust_yaml::Value>, key: &str) -> Option<Vec<String>> {
+fn yaml_get_vec_of_strings(
+    map: &IndexMap<rust_yaml::Value, rust_yaml::Value>,
+    key: &str,
+) -> Option<Vec<String>> {
     yaml_get(map, key).and_then(yaml_as_vec_of_strings)
 }
 
@@ -391,7 +474,7 @@ fn yaml_as_vec_of_strings(y: &rust_yaml::Value) -> Option<Vec<String>> {
         rust_yaml::Value::Sequence(seq) => {
             let mut out = Vec::new();
             for item in seq {
-                let Some(s) = yaml_as_string(item) else { return None };
+                let s = yaml_as_string(item)?;
                 out.push(s);
             }
             Some(out)
@@ -408,45 +491,68 @@ fn yaml_to_license(y: &rust_yaml::Value) -> Option<LicenseDef> {
     let map = yaml_as_mapping(y)?;
     let spdx = yaml_get_string(map, "spdx")
         .or_else(|| yaml_get_string(map, "id"))
-        .or_else(|| yaml_get_string(map, "license"))
-        ?;
+        .or_else(|| yaml_get_string(map, "license"))?;
 
-    let output = yaml_get_string(map, "output").or_else(|| yaml_get_string(map, "path")).map(PathBuf::from);
+    let output = yaml_get_string(map, "output")
+        .or_else(|| yaml_get_string(map, "path"))
+        .map(PathBuf::from);
     let year = yaml_get_string(map, "year");
     let name = yaml_get_string(map, "name");
 
     let mut args = BTreeMap::new();
     if let Some(args_map) = yaml_get(map, "args").and_then(yaml_as_mapping) {
         for (k, v) in args_map {
-            let Some(key) = yaml_as_string(k) else { continue };
-            let Some(val) = yaml_as_string(v) else { continue };
+            let Some(key) = yaml_as_string(k) else {
+                continue;
+            };
+            let Some(val) = yaml_as_string(v) else {
+                continue;
+            };
             args.insert(key, val);
         }
     }
 
-    Some(LicenseDef::Detailed(LicenseDetailed { spdx, output, year, name, args }))
+    Some(LicenseDef::Detailed(LicenseDetailed {
+        spdx,
+        output,
+        year,
+        name,
+        args,
+    }))
 }
 
 impl Config {
     /// Resolve a recipe/target/template name into concrete templates and file sets.
     pub fn resolve_recipe(&self, name: &str) -> Option<ResolvedRecipe> {
         if let Some(def) = self.recipes.get(name) {
-            return Some(ResolvedRecipe { name: name.to_string(), templates: def.templates.clone(), files: def.files.clone() });
+            return Some(ResolvedRecipe {
+                name: name.to_string(),
+                templates: def.templates.clone(),
+                files: def.files.clone(),
+            });
         }
 
         if let Some(stack) = self.targets.get(name) {
-            return Some(ResolvedRecipe { name: name.to_string(), templates: stack.clone(), files: Vec::new() });
+            return Some(ResolvedRecipe {
+                name: name.to_string(),
+                templates: stack.clone(),
+                files: Vec::new(),
+            });
         }
 
         if self.templates.contains_key(name) {
             let mut templates = Vec::new();
-            if let Some(common) = self.common.as_deref() {
-                if common != name {
-                    templates.push(common.to_string());
-                }
+            if let Some(common) = self.common.as_deref()
+                && common != name
+            {
+                templates.push(common.to_string());
             }
             templates.push(name.to_string());
-            return Some(ResolvedRecipe { name: name.to_string(), templates, files: Vec::new() });
+            return Some(ResolvedRecipe {
+                name: name.to_string(),
+                templates,
+                files: Vec::new(),
+            });
         }
 
         None
@@ -484,7 +590,10 @@ rust = ["common", "rust"]
         .unwrap();
 
         let resolved = cfg.resolve_recipe("rust").unwrap();
-        assert_eq!(resolved.templates, vec!["common".to_string(), "rust".to_string()]);
+        assert_eq!(
+            resolved.templates,
+            vec!["common".to_string(), "rust".to_string()]
+        );
     }
 
     #[test]
@@ -505,7 +614,10 @@ targets:
 
         let (_, cfg) = load_config(Some(&path)).unwrap();
         let resolved = cfg.resolve_recipe("rust").unwrap();
-        assert_eq!(resolved.templates, vec!["common".to_string(), "rust".to_string()]);
+        assert_eq!(
+            resolved.templates,
+            vec!["common".to_string(), "rust".to_string()]
+        );
         assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
 
         let _ = fs::remove_dir_all(root);
@@ -607,13 +719,32 @@ templates:
 
     #[test]
     fn yaml_value_string_coercions() {
-        assert_eq!(yaml_as_string(&rust_yaml::Value::Bool(true)).as_deref(), Some("true"));
-        assert_eq!(yaml_as_string(&rust_yaml::Value::Bool(false)).as_deref(), Some("false"));
-        assert_eq!(yaml_as_string(&rust_yaml::Value::Int(42)).as_deref(), Some("42"));
-        assert!(yaml_as_string(&rust_yaml::Value::Float(3.14)).unwrap().starts_with("3.14"));
+        assert_eq!(
+            yaml_as_string(&rust_yaml::Value::Bool(true)).as_deref(),
+            Some("true")
+        );
+        assert_eq!(
+            yaml_as_string(&rust_yaml::Value::Bool(false)).as_deref(),
+            Some("false")
+        );
+        assert_eq!(
+            yaml_as_string(&rust_yaml::Value::Int(42)).as_deref(),
+            Some("42")
+        );
+        assert!(
+            yaml_as_string(&rust_yaml::Value::Float(std::f64::consts::PI))
+                .unwrap()
+                .starts_with("3.14")
+        );
 
-        let seq = rust_yaml::Value::Sequence(vec![rust_yaml::Value::Int(1), rust_yaml::Value::Bool(false)]);
-        assert_eq!(yaml_as_vec_of_strings(&seq).unwrap(), vec!["1".to_string(), "false".to_string()]);
+        let seq = rust_yaml::Value::Sequence(vec![
+            rust_yaml::Value::Int(1),
+            rust_yaml::Value::Bool(false),
+        ]);
+        assert_eq!(
+            yaml_as_vec_of_strings(&seq).unwrap(),
+            vec!["1".to_string(), "false".to_string()]
+        );
 
         let bad = rust_yaml::Value::Sequence(vec![rust_yaml::Value::Mapping(IndexMap::new())]);
         assert!(yaml_as_vec_of_strings(&bad).is_none());
@@ -622,16 +753,28 @@ templates:
     #[test]
     fn yaml_to_config_handles_sources_templates_targets_and_recipes() {
         let mut root = IndexMap::new();
-        root.insert(yaml_key("common"), rust_yaml::Value::String("common".to_string()));
+        root.insert(
+            yaml_key("common"),
+            rust_yaml::Value::String("common".to_string()),
+        );
 
         let mut lic_map = IndexMap::new();
         lic_map.insert(yaml_key("id"), rust_yaml::Value::String("MIT".to_string()));
-        lic_map.insert(yaml_key("path"), rust_yaml::Value::String("LICENSES/MIT.txt".to_string()));
+        lic_map.insert(
+            yaml_key("path"),
+            rust_yaml::Value::String("LICENSES/MIT.txt".to_string()),
+        );
         root.insert(yaml_key("license"), rust_yaml::Value::Mapping(lic_map));
 
         let mut src_ok = IndexMap::new();
-        src_ok.insert(yaml_key("name"), rust_yaml::Value::String("local".to_string()));
-        src_ok.insert(yaml_key("path"), rust_yaml::Value::String("/tmp/templates".to_string()));
+        src_ok.insert(
+            yaml_key("name"),
+            rust_yaml::Value::String("local".to_string()),
+        );
+        src_ok.insert(
+            yaml_key("path"),
+            rust_yaml::Value::String("/tmp/templates".to_string()),
+        );
         let src_missing_name = rust_yaml::Value::Mapping(IndexMap::new());
         root.insert(
             yaml_key("sources"),
@@ -643,10 +786,19 @@ templates:
         );
 
         let mut templates = IndexMap::new();
-        templates.insert(yaml_key("rust"), rust_yaml::Value::String("rust".to_string()));
+        templates.insert(
+            yaml_key("rust"),
+            rust_yaml::Value::String("rust".to_string()),
+        );
         let mut detailed = IndexMap::new();
-        detailed.insert(yaml_key("source"), rust_yaml::Value::String("local".to_string()));
-        detailed.insert(yaml_key("path"), rust_yaml::Value::String("common".to_string()));
+        detailed.insert(
+            yaml_key("source"),
+            rust_yaml::Value::String("local".to_string()),
+        );
+        detailed.insert(
+            yaml_key("path"),
+            rust_yaml::Value::String("common".to_string()),
+        );
         templates.insert(yaml_key("common"), rust_yaml::Value::Mapping(detailed));
         templates.insert(yaml_key("bad"), rust_yaml::Value::Mapping(IndexMap::new()));
         root.insert(yaml_key("templates"), rust_yaml::Value::Mapping(templates));
@@ -654,7 +806,10 @@ templates:
         let mut targets = IndexMap::new();
         targets.insert(
             yaml_key("rust"),
-            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("common".to_string()), rust_yaml::Value::String("rust".to_string())]),
+            rust_yaml::Value::Sequence(vec![
+                rust_yaml::Value::String("common".to_string()),
+                rust_yaml::Value::String("rust".to_string()),
+            ]),
         );
         targets.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
         root.insert(yaml_key("targets"), rust_yaml::Value::Mapping(targets));
@@ -666,14 +821,20 @@ templates:
             rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("rust".to_string())]),
         );
         let mut fs_ok = IndexMap::new();
-        fs_ok.insert(yaml_key("root"), rust_yaml::Value::String("/tmp".to_string()));
+        fs_ok.insert(
+            yaml_key("root"),
+            rust_yaml::Value::String("/tmp".to_string()),
+        );
         fs_ok.insert(
             yaml_key("include"),
             rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("README.md".to_string())]),
         );
         recipe_map.insert(
             yaml_key("files"),
-            rust_yaml::Value::Sequence(vec![rust_yaml::Value::Mapping(fs_ok), rust_yaml::Value::String("bad".to_string())]),
+            rust_yaml::Value::Sequence(vec![
+                rust_yaml::Value::Mapping(fs_ok),
+                rust_yaml::Value::String("bad".to_string()),
+            ]),
         );
         recipes.insert(yaml_key("r1"), rust_yaml::Value::Mapping(recipe_map));
         recipes.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
@@ -682,11 +843,21 @@ templates:
         let cfg = yaml_to_config(Path::new("x"), &rust_yaml::Value::Mapping(root)).unwrap();
         assert_eq!(cfg.common.as_deref(), Some("common"));
         assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
-        assert_eq!(cfg.license.as_ref().unwrap().output_path().to_string_lossy(), "LICENSES/MIT.txt");
+        assert_eq!(
+            cfg.license
+                .as_ref()
+                .unwrap()
+                .output_path()
+                .to_string_lossy(),
+            "LICENSES/MIT.txt"
+        );
         assert_eq!(cfg.sources.len(), 1);
         assert!(cfg.templates.contains_key("rust"));
         assert!(cfg.templates.contains_key("common"));
-        assert_eq!(cfg.targets.get("rust").unwrap(), &vec!["common".to_string(), "rust".to_string()]);
+        assert_eq!(
+            cfg.targets.get("rust").unwrap(),
+            &vec!["common".to_string(), "rust".to_string()]
+        );
         assert!(cfg.recipes.contains_key("r1"));
         assert_eq!(cfg.recipes["r1"].files.len(), 1);
     }

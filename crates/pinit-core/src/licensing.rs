@@ -21,24 +21,36 @@ impl std::fmt::Display for LicenseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LicenseError::UnknownSpdxId { spdx } => write!(f, "unknown SPDX license id: {spdx}"),
-            LicenseError::UnterminatedDirective { spdx } => write!(f, "unterminated SPDX template directive in {spdx} text"),
-            LicenseError::MissingTemplateVar { spdx, name } => write!(f, "missing SPDX template variable {name:?} for {spdx}"),
+            LicenseError::UnterminatedDirective { spdx } => {
+                write!(f, "unterminated SPDX template directive in {spdx} text")
+            }
+            LicenseError::MissingTemplateVar { spdx, name } => {
+                write!(f, "missing SPDX template variable {name:?} for {spdx}")
+            }
         }
     }
 }
 
 impl std::error::Error for LicenseError {}
 
-pub fn render_spdx_license(spdx: &str, template_args: &BTreeMap<String, String>) -> Result<RenderedLicense, LicenseError> {
+pub fn render_spdx_license(
+    spdx: &str,
+    template_args: &BTreeMap<String, String>,
+) -> Result<RenderedLicense, LicenseError> {
     use std::str::FromStr;
 
-    let parsed: &dyn license::License = <&dyn license::License>::from_str(spdx)
-        .map_err(|_| LicenseError::UnknownSpdxId { spdx: spdx.to_string() })?;
+    let parsed: &dyn license::License =
+        <&dyn license::License>::from_str(spdx).map_err(|_| LicenseError::UnknownSpdxId {
+            spdx: spdx.to_string(),
+        })?;
 
     let raw = parsed.text();
     let expanded = expand_spdx_template(spdx, raw, template_args)?;
     let expanded = replace_angle_placeholders(&expanded, template_args);
-    Ok(RenderedLicense { spdx: spdx.to_string(), text: expanded })
+    Ok(RenderedLicense {
+        spdx: spdx.to_string(),
+        text: expanded,
+    })
 }
 
 fn expand_spdx_template(
@@ -53,7 +65,9 @@ fn expand_spdx_template(
         let open = idx + open_rel;
         out.push_str(&template[idx..open]);
         let Some(close_rel) = template[open + 2..].find(">>") else {
-            return Err(LicenseError::UnterminatedDirective { spdx: spdx.to_string() });
+            return Err(LicenseError::UnterminatedDirective {
+                spdx: spdx.to_string(),
+            });
         };
         let close = open + 2 + close_rel;
         let directive = template[open + 2..close].trim();
@@ -72,7 +86,9 @@ fn expand_spdx_template(
             continue;
         }
 
-        if directive.to_ascii_lowercase().starts_with("var;") || directive.eq_ignore_ascii_case("var") {
+        if directive.to_ascii_lowercase().starts_with("var;")
+            || directive.eq_ignore_ascii_case("var")
+        {
             let value = expand_var_directive(spdx, directive, template_args)?;
             out.push_str(&value);
             idx = close + 2;
@@ -110,7 +126,9 @@ fn expand_var_directive(
     let mut name = None;
     let mut original = None;
     for part in parts {
-        let Some((k, v)) = part.split_once('=') else { continue };
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
         let key = k.trim();
         let mut val = v.trim().to_string();
         val = unquote(&val);
@@ -133,7 +151,10 @@ fn expand_var_directive(
         return Ok(orig);
     }
 
-    Err(LicenseError::MissingTemplateVar { spdx: spdx.to_string(), name })
+    Err(LicenseError::MissingTemplateVar {
+        spdx: spdx.to_string(),
+        name,
+    })
 }
 
 fn split_semicolons(s: &str) -> Vec<String> {
@@ -249,7 +270,9 @@ mod tests {
     fn directive_var_errors_when_missing_without_original() {
         let tpl = "X <<var;name=\"missing\">> Y";
         let err = expand_spdx_template("X", tpl, &BTreeMap::new()).unwrap_err();
-        assert!(matches!(err, LicenseError::MissingTemplateVar { ref name, .. } if name == "missing"));
+        assert!(
+            matches!(err, LicenseError::MissingTemplateVar { ref name, .. } if name == "missing")
+        );
     }
 
     #[test]

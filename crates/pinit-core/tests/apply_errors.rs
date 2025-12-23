@@ -7,7 +7,10 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 fn make_temp_root() -> TempRoot {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-apply-errors-test-{}-{n}", std::process::id()));
+    path.push(format!(
+        "pinit-apply-errors-test-{}-{n}",
+        std::process::id()
+    ));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -137,5 +140,8 @@ fn apply_template_dir_errors_when_template_is_symlink() {
     )
     .unwrap_err();
 
-    assert!(matches!(err, pinit_core::ApplyError::SymlinkNotSupported(_)));
+    assert!(matches!(
+        err,
+        pinit_core::ApplyError::SymlinkNotSupported(_)
+    ));
 }

@@ -41,7 +41,12 @@ fn no_args_prints_help_and_exits_2() {
 
 #[test]
 fn list_without_config_is_ok() {
-    let out = pinit().arg("list").output().unwrap();
+    let root = make_temp_root();
+    let out = pinit()
+        .arg("list")
+        .env("XDG_CONFIG_HOME", &root.0)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("no config found"));
@@ -69,7 +74,10 @@ templates = ["rust"]
     )
     .unwrap();
 
-    let out = pinit().args(["--config", cfg.to_string_lossy().as_ref(), "list"]).output().unwrap();
+    let out = pinit()
+        .args(["--config", cfg.to_string_lossy().as_ref(), "list"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("templates:"));
@@ -96,7 +104,10 @@ templates = []
     )
     .unwrap();
 
-    let out = pinit().args(["--config", cfg.to_string_lossy().as_ref(), "list"]).output().unwrap();
+    let out = pinit()
+        .args(["--config", cfg.to_string_lossy().as_ref(), "list"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("empty (templates: -"));
@@ -120,7 +131,10 @@ fn apply_from_template_dir_copies_files() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "hello\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "hello\n"
+    );
 }
 
 #[test]
@@ -192,7 +206,10 @@ fn apply_interactive_diff_then_skip_leaves_file_unchanged() {
 
     let out = child.wait_with_output().unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "from-dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-dest\n"
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("diffs for"));
 }
@@ -372,7 +389,10 @@ fn apply_interactive_overwrite_updates_file() {
 
     let out = child.wait_with_output().unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "from-template\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-template\n"
+    );
 }
 
 #[test]
@@ -430,7 +450,10 @@ fn list_with_invalid_config_errors() {
     let cfg = root.join("pinit.toml");
     fs::write(&cfg, "not = toml = ").unwrap();
 
-    let out = pinit().args(["--config", cfg.to_string_lossy().as_ref(), "list"]).output().unwrap();
+    let out = pinit()
+        .args(["--config", cfg.to_string_lossy().as_ref(), "list"])
+        .output()
+        .unwrap();
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("error:"));
@@ -457,7 +480,10 @@ fn apply_yes_skip_does_not_overwrite_existing() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "from-dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-dest\n"
+    );
 }
 
 #[test]
@@ -481,7 +507,10 @@ fn apply_yes_merge_unavailable_defaults_to_skip() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join(".env")).unwrap(), "# comment\nA=dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join(".env")).unwrap(),
+        "# comment\nA=dest\n"
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("skipped 1 file"));
 }
@@ -508,7 +537,10 @@ fn apply_yes_overwrite_overwrites_existing() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "from-template\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-template\n"
+    );
 }
 
 #[test]

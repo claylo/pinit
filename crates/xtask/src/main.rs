@@ -59,7 +59,8 @@ fn generate_manpage(out_dir: &Path) -> Result<(), String> {
     let cmd = pinit_cli::command();
     let man = clap_mangen::Man::new(cmd);
     let mut buffer: Vec<u8> = Vec::new();
-    man.render(&mut buffer).map_err(|e| format!("render manpage: {e}"))?;
+    man.render(&mut buffer)
+        .map_err(|e| format!("render manpage: {e}"))?;
 
     let man_path = out_dir.join("pinit.1");
     fs::write(&man_path, buffer).map_err(|e| format!("{}: {e}", man_path.display()))?;
@@ -74,7 +75,10 @@ fn install_cli(bin_dir: &str, profile: &str) -> Result<(), String> {
     let root = workspace_root();
     let status = build_cli(&root, profile)?;
     if !status.success() {
-        return Err(format!("cargo build failed with status {}", status.code().unwrap_or(1)));
+        return Err(format!(
+            "cargo build failed with status {}",
+            status.code().unwrap_or(1)
+        ));
     }
 
     let bin_path = built_binary(&root, profile);
@@ -91,13 +95,17 @@ fn install_cli(bin_dir: &str, profile: &str) -> Result<(), String> {
 
 fn build_cli(root: &Path, profile: &str) -> Result<std::process::ExitStatus, String> {
     let mut cmd = Command::new("cargo");
-    cmd.arg("build").arg("-p").arg("pinit-cli").current_dir(root);
+    cmd.arg("build")
+        .arg("-p")
+        .arg("pinit-cli")
+        .current_dir(root);
     if profile == "release" {
         cmd.arg("--release");
     } else {
         cmd.arg("--profile").arg(profile);
     }
-    cmd.status().map_err(|e| format!("failed to run cargo: {e}"))
+    cmd.status()
+        .map_err(|e| format!("failed to run cargo: {e}"))
 }
 
 fn built_binary(root: &Path, profile: &str) -> PathBuf {
@@ -124,7 +132,9 @@ fn set_executable(path: &Path) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?.permissions();
+        let mut perms = fs::metadata(path)
+            .map_err(|e| format!("{}: {e}", path.display()))?
+            .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(path, perms).map_err(|e| format!("{}: {e}", path.display()))?;
     }

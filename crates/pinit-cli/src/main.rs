@@ -76,17 +76,31 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
         ExistingFileAction::Merge
     };
 
-    let mut decider = CliDecider::new(default_action, args.yes || args.overwrite || args.merge || args.skip);
+    let mut decider = CliDecider::new(
+        default_action,
+        args.yes || args.overwrite || args.merge || args.skip,
+    );
 
     let mut report = apply_template_stack(
         config_path,
         &args.template,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: args.dry_run },
+        pinit_core::ApplyOptions {
+            dry_run: args.dry_run,
+        },
         &mut decider,
     )?;
 
-    report = maybe_apply_license(config_path, &args.template, &dest_dir, pinit_core::ApplyOptions { dry_run: args.dry_run }, &mut decider, report)?;
+    report = maybe_apply_license(
+        config_path,
+        &args.template,
+        &dest_dir,
+        pinit_core::ApplyOptions {
+            dry_run: args.dry_run,
+        },
+        &mut decider,
+        report,
+    )?;
 
     print_apply_summary(args.dry_run, report);
     Ok(())
@@ -97,7 +111,7 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         template = %args.template,
         dir = %args.dir.display(),
         dry_run = args.dry_run,
-        git = %(args.no_git == false),
+        git = %(!args.no_git),
         branch = %args.branch,
         "new"
     );
@@ -120,7 +134,14 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
             &mut decider,
         )?;
 
-        report = maybe_apply_license(config_path, &args.template, &args.dir, pinit_core::ApplyOptions { dry_run: true }, &mut decider, report)?;
+        report = maybe_apply_license(
+            config_path,
+            &args.template,
+            &args.dir,
+            pinit_core::ApplyOptions { dry_run: true },
+            &mut decider,
+            report,
+        )?;
 
         eprintln!("dry-run: would create directory {}", args.dir.display());
         if args.no_git {
@@ -133,13 +154,21 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
     }
 
     if args.dir.exists() {
-        let meta = std::fs::metadata(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
+        let meta =
+            std::fs::metadata(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
         if !meta.is_dir() {
-            return Err(format!("destination is not a directory: {}", args.dir.display()));
+            return Err(format!(
+                "destination is not a directory: {}",
+                args.dir.display()
+            ));
         }
-        let mut iter = std::fs::read_dir(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
+        let mut iter =
+            std::fs::read_dir(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
         if iter.next().is_some() {
-            return Err(format!("destination already exists and is not empty: {}", args.dir.display()));
+            return Err(format!(
+                "destination already exists and is not empty: {}",
+                args.dir.display()
+            ));
         }
     } else {
         std::fs::create_dir_all(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
@@ -157,7 +186,10 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         ExistingFileAction::Merge
     };
 
-    let mut decider = CliDecider::new(default_action, args.yes || args.overwrite || args.merge || args.skip);
+    let mut decider = CliDecider::new(
+        default_action,
+        args.yes || args.overwrite || args.merge || args.skip,
+    );
     let mut report = apply_template_stack(
         config_path,
         &args.template,
@@ -166,7 +198,14 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         &mut decider,
     )?;
 
-    report = maybe_apply_license(config_path, &args.template, &args.dir, pinit_core::ApplyOptions { dry_run: false }, &mut decider, report)?;
+    report = maybe_apply_license(
+        config_path,
+        &args.template,
+        &args.dir,
+        pinit_core::ApplyOptions { dry_run: false },
+        &mut decider,
+        report,
+    )?;
 
     print_apply_summary(false, report);
     Ok(())
@@ -184,7 +223,8 @@ fn apply_template_stack(
     let mut report = pinit_core::ApplyReport::default();
     for dir in resolved.template_dirs {
         tracing::info!(template_dir = %dir.display(), "apply template dir");
-        let r = pinit_core::apply_template_dir(&dir, dest_dir, options, decider).map_err(|e| e.to_string())?;
+        let r = pinit_core::apply_template_dir(&dir, dest_dir, options, decider)
+            .map_err(|e| e.to_string())?;
         report.created_files += r.created_files;
         report.updated_files += r.updated_files;
         report.skipped_files += r.skipped_files;
@@ -197,16 +237,26 @@ struct TemplateResolution {
     template_dirs: Vec<PathBuf>,
 }
 
-fn resolve_template_dirs(config_path: Option<&std::path::Path>, template: &str) -> Result<TemplateResolution, String> {
+fn resolve_template_dirs(
+    config_path: Option<&std::path::Path>,
+    template: &str,
+) -> Result<TemplateResolution, String> {
     let template_path = PathBuf::from(template);
     if template_path.is_dir() {
-        return Ok(TemplateResolution { template_dirs: vec![template_path] });
+        return Ok(TemplateResolution {
+            template_dirs: vec![template_path],
+        });
     }
 
     let (_path, cfg) = pinit_core::config::load_config(config_path).map_err(|e| e.to_string())?;
-    let resolver = pinit_core::resolve::TemplateResolver::with_default_cache().map_err(|e| e.to_string())?;
-    let dirs = resolver.resolve_recipe_template_dirs(&cfg, template).map_err(|e| e.to_string())?;
-    Ok(TemplateResolution { template_dirs: dirs })
+    let resolver =
+        pinit_core::resolve::TemplateResolver::with_default_cache().map_err(|e| e.to_string())?;
+    let dirs = resolver
+        .resolve_recipe_template_dirs(&cfg, template)
+        .map_err(|e| e.to_string())?;
+    Ok(TemplateResolution {
+        template_dirs: dirs,
+    })
 }
 
 fn print_apply_summary(dry_run: bool, report: pinit_core::ApplyReport) {
@@ -246,18 +296,25 @@ fn maybe_apply_license(
 
     let rel_path = license_def.output_path();
     if rel_path.is_absolute() {
-        return Err(format!("license.output must be a relative path, got {}", rel_path.display()));
+        return Err(format!(
+            "license.output must be a relative path, got {}",
+            rel_path.display()
+        ));
     }
 
-    let rendered = pinit_core::licensing::render_spdx_license(license_def.spdx(), &license_def.template_args())
-        .map_err(|e| e.to_string())?;
+    let rendered = pinit_core::licensing::render_spdx_license(
+        license_def.spdx(),
+        &license_def.template_args(),
+    )
+    .map_err(|e| e.to_string())?;
 
     let mut bytes = rendered.text.into_bytes();
     if !bytes.ends_with(b"\n") {
         bytes.push(b'\n');
     }
 
-    let r = pinit_core::apply_generated_file(dest_dir, &rel_path, &bytes, options, decider).map_err(|e| e.to_string())?;
+    let r = pinit_core::apply_generated_file(dest_dir, &rel_path, &bytes, options, decider)
+        .map_err(|e| e.to_string())?;
     report.created_files += r.created_files;
     report.updated_files += r.updated_files;
     report.skipped_files += r.skipped_files;
@@ -269,7 +326,10 @@ fn git_init(dir: &std::path::Path, branch: &str) -> Result<(), String> {
     tracing::info!(dir = %dir.display(), branch = %branch, "git init");
 
     let mut cmd = ProcessCommand::new("git");
-    cmd.arg("init").arg("--initial-branch").arg(branch).current_dir(dir);
+    cmd.arg("init")
+        .arg("--initial-branch")
+        .arg(branch)
+        .current_dir(dir);
     match cmd.output() {
         Ok(out) if out.status.success() => return Ok(()),
         Ok(out) => {
@@ -322,7 +382,10 @@ struct CliDecider {
 
 impl CliDecider {
     fn new(default_action: ExistingFileAction, non_interactive: bool) -> Self {
-        Self { default_action, non_interactive }
+        Self {
+            default_action,
+            non_interactive,
+        }
     }
 
     fn prompt(&self, ctx: &ExistingFileDecisionContext<'_>) -> ExistingFileAction {
@@ -332,7 +395,10 @@ impl CliDecider {
         loop {
             eprintln!();
             eprintln!("file exists: {rel}");
-            eprintln!("merge available: {}", if merge_available { "yes" } else { "no" });
+            eprintln!(
+                "merge available: {}",
+                if merge_available { "yes" } else { "no" }
+            );
             eprintln!("choose: (m)erge, (o)verwrite, (s)kip, (d)iff  [default: m]");
             eprint!("> ");
             {
@@ -404,7 +470,11 @@ impl ExistingFileDecider for CliDecider {
 fn print_unified_diff(old_label: &str, new_label: &str, old_bytes: &[u8], new_bytes: &[u8]) {
     const MAX_BYTES: usize = 200_000;
     if old_bytes.len() > MAX_BYTES || new_bytes.len() > MAX_BYTES {
-        eprintln!("(diff too large: {} → {} bytes)", old_bytes.len(), new_bytes.len());
+        eprintln!(
+            "(diff too large: {} → {} bytes)",
+            old_bytes.len(),
+            new_bytes.len()
+        );
         return;
     }
 
@@ -439,7 +509,10 @@ fn cmd_list(config_path: Option<&std::path::Path>) -> Result<(), String> {
                 println!("\ntemplates:");
                 for (name, def) in &cfg.templates {
                     let source = def.source().unwrap_or("-");
-                    println!("  {name} (source: {source}, path: {})", def.path().display());
+                    println!(
+                        "  {name} (source: {source}, path: {})",
+                        def.path().display()
+                    );
                 }
             }
 
@@ -458,7 +531,10 @@ fn cmd_list(config_path: Option<&std::path::Path>) -> Result<(), String> {
                     } else {
                         recipe.templates.join(" + ")
                     };
-                    println!("  {name} (templates: {tmpl}, filesets: {})", recipe.files.len());
+                    println!(
+                        "  {name} (templates: {tmpl}, filesets: {})",
+                        recipe.files.len()
+                    );
                 }
             }
 
@@ -560,7 +636,10 @@ mod tests {
         .unwrap();
 
         assert!(dest.is_dir());
-        assert_eq!(fs::read_to_string(dest.join("hello.txt")).unwrap(), "hello\n");
+        assert_eq!(
+            fs::read_to_string(dest.join("hello.txt")).unwrap(),
+            "hello\n"
+        );
         assert!(!dest.join(".git").exists());
     }
 

@@ -71,7 +71,10 @@ common = "/tmp/common"
 
 #[test]
 fn load_config_missing_path_returns_io_error() {
-    let path = std::env::temp_dir().join(format!("pinit-config-missing-{}-nope.toml", std::process::id()));
+    let path = std::env::temp_dir().join(format!(
+        "pinit-config-missing-{}-nope.toml",
+        std::process::id()
+    ));
     let err = pinit_core::config::load_config(Some(&path)).unwrap_err();
     assert!(matches!(err, pinit_core::config::ConfigError::Io { .. }));
 }

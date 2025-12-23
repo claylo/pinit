@@ -9,7 +9,10 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 fn make_temp_root() -> TempRoot {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-merge-strategies-test-{}-{n}", std::process::id()));
+    path.push(format!(
+        "pinit-merge-strategies-test-{}-{n}",
+        std::process::id()
+    ));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -36,7 +39,11 @@ impl ExistingFileDecider for FixedDecider {
     }
 }
 
-fn run_merge(file_name: &str, dest_contents: &[u8], template_contents: &[u8]) -> (String, pinit_core::ApplyReport) {
+fn run_merge(
+    file_name: &str,
+    dest_contents: &[u8],
+    template_contents: &[u8],
+) -> (String, pinit_core::ApplyReport) {
     let root = make_temp_root();
     let template_dir = root.join("template");
     let dest_dir = root.join("dest");
@@ -109,11 +116,7 @@ fn merge_lines_appends_missing_exact_lines() {
 
 #[test]
 fn merge_toml_ignores_type_mismatches_but_inserts_other_keys() {
-    let (out, report) = run_merge(
-        "config.toml",
-        b"a = 1\n",
-        b"b = 2\n[a]\nx = 2\n",
-    );
+    let (out, report) = run_merge("config.toml", b"a = 1\n", b"b = 2\n[a]\nx = 2\n");
     assert_eq!(report.updated_files, 1);
     assert!(out.contains("a = 1"));
     assert!(out.contains("b = 2"));
@@ -142,7 +145,10 @@ fn merge_lines_no_new_lines_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("notes.txt")).unwrap(), "a\nb\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("notes.txt")).unwrap(),
+        "a\nb\n"
+    );
 }
 
 #[test]
@@ -167,7 +173,10 @@ fn merge_env_no_missing_keys_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join(".env")).unwrap(), "A=dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join(".env")).unwrap(),
+        "A=dest\n"
+    );
 }
 
 #[test]
@@ -287,7 +296,10 @@ fn merge_ruby_call_is_not_treated_as_require_import() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("main.rb")).unwrap(), "require 'a'\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("main.rb")).unwrap(),
+        "require 'a'\n"
+    );
 }
 
 #[test]
@@ -342,7 +354,10 @@ fn merge_rust_no_additions_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("lib.rs")).unwrap(), "use std::fmt;\n\nfn foo() {}\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("lib.rs")).unwrap(),
+        "use std::fmt;\n\nfn foo() {}\n"
+    );
 }
 
 #[test]
@@ -391,7 +406,11 @@ fn merge_css_no_additions_results_in_skip_after_merge() {
     fs::create_dir_all(&template_dir).unwrap();
     fs::create_dir_all(&dest_dir).unwrap();
 
-    fs::write(dest_dir.join("styles.css"), "/* keep */\nbody { color: red; }\n").unwrap();
+    fs::write(
+        dest_dir.join("styles.css"),
+        "/* keep */\nbody { color: red; }\n",
+    )
+    .unwrap();
     fs::write(template_dir.join("styles.css"), "body { color: red; }\n").unwrap();
 
     let mut decider = FixedDecider(ExistingFileAction::Merge);
@@ -405,7 +424,10 @@ fn merge_css_no_additions_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("styles.css")).unwrap(), "/* keep */\nbody { color: red; }\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("styles.css")).unwrap(),
+        "/* keep */\nbody { color: red; }\n"
+    );
 }
 
 #[test]
@@ -443,7 +465,10 @@ fn merge_markdown_no_additions_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("README.md")).unwrap(), "Title\n=====\n\nkeep\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("README.md")).unwrap(),
+        "Title\n=====\n\nkeep\n"
+    );
 }
 
 #[test]
@@ -467,8 +492,16 @@ fn merge_html_no_additions_results_in_skip_after_merge() {
     fs::create_dir_all(&template_dir).unwrap();
     fs::create_dir_all(&dest_dir).unwrap();
 
-    fs::write(dest_dir.join("index.html"), "<script src=\"a.js\"></script>").unwrap();
-    fs::write(template_dir.join("index.html"), "<script src=\"a.js\"></script>\n").unwrap();
+    fs::write(
+        dest_dir.join("index.html"),
+        "<script src=\"a.js\"></script>",
+    )
+    .unwrap();
+    fs::write(
+        template_dir.join("index.html"),
+        "<script src=\"a.js\"></script>\n",
+    )
+    .unwrap();
 
     let mut decider = FixedDecider(ExistingFileAction::Merge);
     let report = pinit_core::apply_template_dir(
@@ -481,5 +514,8 @@ fn merge_html_no_additions_results_in_skip_after_merge() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("index.html")).unwrap(), "<script src=\"a.js\"></script>");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("index.html")).unwrap(),
+        "<script src=\"a.js\"></script>"
+    );
 }

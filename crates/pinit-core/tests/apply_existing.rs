@@ -9,7 +9,10 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 fn make_temp_root() -> TempRoot {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-apply-existing-test-{}-{n}", std::process::id()));
+    path.push(format!(
+        "pinit-apply-existing-test-{}-{n}",
+        std::process::id()
+    ));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -60,7 +63,10 @@ fn existing_file_overwrite_replaces_contents() {
     assert_eq!(report.created_files, 0);
     assert_eq!(report.updated_files, 1);
     assert_eq!(report.skipped_files, 0);
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "from-template\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-template\n"
+    );
 }
 
 #[test]
@@ -93,4 +99,3 @@ fn existing_env_merge_adds_missing_keys_only() {
     assert!(out.contains("B=template\n"));
     assert!(!out.contains("A=template\n"));
 }
-
