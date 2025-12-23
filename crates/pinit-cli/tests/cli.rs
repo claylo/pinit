@@ -41,7 +41,12 @@ fn no_args_prints_help_and_exits_2() {
 
 #[test]
 fn list_without_config_is_ok() {
-    let out = pinit().arg("list").output().unwrap();
+    let root = make_temp_root();
+    let out = pinit()
+        .arg("list")
+        .env("XDG_CONFIG_HOME", &root.0)
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("no config found"));
