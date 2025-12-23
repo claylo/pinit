@@ -688,7 +688,12 @@ mod tests {
             cwd: temp.join("missing"),
         };
         let err = gi.ignored_set(&["a.txt".to_string()]).unwrap_err();
-        assert!(matches!(err, ApplyError::GitIgnoreFailed { .. }));
+        // In CI the git process can exit before stdin writes complete,
+        // so we may see a broken-pipe IO error instead of GitIgnoreFailed.
+        assert!(matches!(
+            err,
+            ApplyError::GitIgnoreFailed { .. } | ApplyError::Io { .. }
+        ));
         let _ = fs::remove_dir_all(temp);
     }
 
