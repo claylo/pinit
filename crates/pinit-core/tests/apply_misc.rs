@@ -57,7 +57,10 @@ fn skip_existing_decider_is_used_for_existing_files() {
 
     assert_eq!(report.updated_files, 0);
     assert_eq!(report.skipped_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "dest\n"
+    );
 }
 
 #[test]
@@ -81,7 +84,10 @@ fn overwrite_dry_run_counts_update_without_writing() {
     .unwrap();
 
     assert_eq!(report.updated_files, 1);
-    assert_eq!(fs::read_to_string(dest_dir.join("hello.txt")).unwrap(), "dest\n");
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "dest\n"
+    );
 }
 
 #[test]
@@ -172,6 +178,10 @@ fn overwrite_preserves_existing_permissions() {
     )
     .unwrap();
 
-    let out_perms = fs::metadata(dest_dir.join("hello.txt")).unwrap().permissions().mode() & 0o777;
+    let out_perms = fs::metadata(dest_dir.join("hello.txt"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
     assert_eq!(out_perms, 0o600);
 }

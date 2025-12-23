@@ -35,7 +35,12 @@ impl Drop for TempRoot {
 }
 
 fn git(repo_dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new("git").arg("-C").arg(repo_dir).args(args).output().unwrap()
+    Command::new("git")
+        .arg("-C")
+        .arg(repo_dir)
+        .args(args)
+        .output()
+        .unwrap()
 }
 
 fn git_ok(repo_dir: &Path, args: &[&str]) {
@@ -51,7 +56,11 @@ fn git_ok(repo_dir: &Path, args: &[&str]) {
 
 fn git_stdout(repo_dir: &Path, args: &[&str]) -> String {
     let out = git(repo_dir, args);
-    assert!(out.status.success(), "git failed: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "git failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
@@ -62,10 +71,17 @@ fn resolves_local_template_from_source_path() {
     fs::create_dir_all(templates_root.join("rust")).unwrap();
 
     let mut cfg = Config::default();
-    cfg.sources.push(Source { name: "local".into(), path: Some(templates_root.clone()), ..Default::default() });
+    cfg.sources.push(Source {
+        name: "local".into(),
+        path: Some(templates_root.clone()),
+        ..Default::default()
+    });
     cfg.templates.insert(
         "rust".into(),
-        TemplateDef::Detailed { source: Some("local".into()), path: PathBuf::from("rust") },
+        TemplateDef::Detailed {
+            source: Some("local".into()),
+            path: PathBuf::from("rust"),
+        },
     );
 
     let resolver = TemplateResolver::new(root.join("cache"));
@@ -83,16 +99,21 @@ fn resolves_git_template_from_cached_clone() {
     let repo_dir = root.join("repo");
     fs::create_dir_all(&repo_dir).unwrap();
 
-    assert!(Command::new("git")
-        .arg("init")
-        .arg("-q")
-        .arg(&repo_dir)
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(&repo_dir)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
-    git_ok(&repo_dir, &["config", "user.email", "pinit@example.invalid"]);
+    git_ok(
+        &repo_dir,
+        &["config", "user.email", "pinit@example.invalid"],
+    );
     git_ok(&repo_dir, &["config", "user.name", "pinit"]);
 
     fs::create_dir_all(repo_dir.join("templates/rust")).unwrap();
@@ -112,7 +133,10 @@ fn resolves_git_template_from_cached_clone() {
     });
     cfg.templates.insert(
         "rust".into(),
-        TemplateDef::Detailed { source: Some("repo".into()), path: PathBuf::from("rust") },
+        TemplateDef::Detailed {
+            source: Some("repo".into()),
+            path: PathBuf::from("rust"),
+        },
     );
 
     let cache_dir = root.join("cache");
@@ -132,14 +156,16 @@ fn missing_git_ref_returns_error() {
     let repo_dir = root.join("repo");
     fs::create_dir_all(&repo_dir).unwrap();
 
-    assert!(Command::new("git")
-        .arg("init")
-        .arg("-q")
-        .arg(&repo_dir)
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(&repo_dir)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     let mut cfg = Config::default();
     cfg.sources.push(Source {
@@ -151,7 +177,10 @@ fn missing_git_ref_returns_error() {
     });
     cfg.templates.insert(
         "rust".into(),
-        TemplateDef::Detailed { source: Some("repo".into()), path: PathBuf::from("rust") },
+        TemplateDef::Detailed {
+            source: Some("repo".into()),
+            path: PathBuf::from("rust"),
+        },
     );
 
     let resolver = TemplateResolver::new(root.join("cache"));
@@ -179,7 +208,10 @@ fn resolve_errors_on_unknown_source() {
     let mut cfg = Config::default();
     cfg.templates.insert(
         "t".into(),
-        TemplateDef::Detailed { source: Some("missing".into()), path: PathBuf::from("x") },
+        TemplateDef::Detailed {
+            source: Some("missing".into()),
+            path: PathBuf::from("x"),
+        },
     );
     let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();
     match err {
@@ -192,10 +224,19 @@ fn resolve_errors_on_unknown_source() {
 fn resolve_errors_on_source_repo_missing() {
     let resolver = TemplateResolver::new(std::env::temp_dir().join("pinit-resolve-cache-errors"));
     let mut cfg = Config::default();
-    cfg.sources.push(Source { name: "local".into(), path: None, repo: None, git_ref: None, subdir: None });
+    cfg.sources.push(Source {
+        name: "local".into(),
+        path: None,
+        repo: None,
+        git_ref: None,
+        subdir: None,
+    });
     cfg.templates.insert(
         "t".into(),
-        TemplateDef::Detailed { source: Some("local".into()), path: PathBuf::from("x") },
+        TemplateDef::Detailed {
+            source: Some("local".into()),
+            path: PathBuf::from("x"),
+        },
     );
     let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();
     match err {
@@ -213,10 +254,17 @@ fn resolve_errors_when_template_path_not_dir() {
 
     let resolver = TemplateResolver::new(root.join("cache"));
     let mut cfg = Config::default();
-    cfg.sources.push(Source { name: "local".into(), path: Some(templates_root.clone()), ..Default::default() });
+    cfg.sources.push(Source {
+        name: "local".into(),
+        path: Some(templates_root.clone()),
+        ..Default::default()
+    });
     cfg.templates.insert(
         "t".into(),
-        TemplateDef::Detailed { source: Some("local".into()), path: PathBuf::from("not_a_dir") },
+        TemplateDef::Detailed {
+            source: Some("local".into()),
+            path: PathBuf::from("not_a_dir"),
+        },
     );
 
     let err = resolver.resolve_template_dir(&cfg, "t").unwrap_err();

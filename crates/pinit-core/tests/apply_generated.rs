@@ -9,7 +9,10 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 fn make_temp_root() -> TempRoot {
     let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path = std::env::temp_dir();
-    path.push(format!("pinit-apply-generated-test-{}-{n}", std::process::id()));
+    path.push(format!(
+        "pinit-apply-generated-test-{}-{n}",
+        std::process::id()
+    ));
     fs::create_dir_all(&path).unwrap();
     TempRoot(path)
 }
@@ -183,7 +186,10 @@ fn apply_generated_errors_when_dest_is_symlink() {
     )
     .unwrap_err();
 
-    assert!(matches!(err, pinit_core::ApplyError::SymlinkNotSupported(_)));
+    assert!(matches!(
+        err,
+        pinit_core::ApplyError::SymlinkNotSupported(_)
+    ));
 }
 
 #[test]
@@ -192,14 +198,16 @@ fn apply_generated_respects_destination_gitignore() {
     let dest = root.join("dest");
     fs::create_dir_all(&dest).unwrap();
 
-    assert!(std::process::Command::new("git")
-        .arg("init")
-        .arg("-q")
-        .arg(&dest)
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        std::process::Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .arg(&dest)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     fs::write(dest.join(".gitignore"), "LICENSE\n").unwrap();
 

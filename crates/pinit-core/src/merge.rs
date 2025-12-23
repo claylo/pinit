@@ -3,11 +3,14 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use tracing::debug;
 use rust_yaml::Emitter;
+use tracing::debug;
 
 pub fn merge_file(rel_path: &Path, dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
-    let file_name = rel_path.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+    let file_name = rel_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
     if file_name == ".envrc" {
         return merge_envrc(dest_bytes, src_bytes);
     }
@@ -15,7 +18,11 @@ pub fn merge_file(rel_path: &Path, dest_bytes: &[u8], src_bytes: &[u8]) -> Optio
         return merge_env(dest_bytes, src_bytes);
     }
 
-    let ext = rel_path.extension().and_then(|s| s.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let ext = rel_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     match ext.as_str() {
         "toml" => merge_toml(dest_bytes, src_bytes),
         "yml" | "yaml" => merge_yaml(dest_bytes, src_bytes),
@@ -128,7 +135,9 @@ fn env_key(line: &str) -> Option<String> {
 
 fn is_env_ident(s: &str) -> bool {
     let mut chars = s.chars();
-    let Some(first) = chars.next() else { return false };
+    let Some(first) = chars.next() else {
+        return false;
+    };
     if !(first == '_' || first.is_ascii_alphabetic()) {
         return false;
     }
@@ -212,7 +221,9 @@ fn merge_toml_table(dest: &mut toml_edit::Table, src: &toml_edit::Table) {
             dest.insert(key, src_item.clone());
             continue;
         }
-        let Some(dest_item) = dest.get_mut(key) else { continue };
+        let Some(dest_item) = dest.get_mut(key) else {
+            continue;
+        };
 
         match (dest_item, src_item) {
             (toml_edit::Item::Table(dest_table), toml_edit::Item::Table(src_table)) => {
@@ -265,7 +276,9 @@ fn merge_rust(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         tree_sitter_rust::LANGUAGE.into(),
         LangMergeRules {
             import_like: &["use"],
-            named_like: &["function", "struct", "enum", "trait", "type", "const", "static", "mod"],
+            named_like: &[
+                "function", "struct", "enum", "trait", "type", "const", "static", "mod",
+            ],
             skip_if_dest_has_namespace: false,
         },
         "rust",
@@ -291,7 +304,11 @@ fn merge_python(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         dest_bytes,
         src_bytes,
         tree_sitter_python::LANGUAGE.into(),
-        LangMergeRules { import_like: &["import"], named_like: &["function", "class"], skip_if_dest_has_namespace: false },
+        LangMergeRules {
+            import_like: &["import"],
+            named_like: &["function", "class"],
+            skip_if_dest_has_namespace: false,
+        },
         "python",
     )
 }
@@ -343,7 +360,11 @@ fn merge_lua(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         dest_bytes,
         src_bytes,
         tree_sitter_lua::LANGUAGE.into(),
-        LangMergeRules { import_like: &[], named_like: &["function"], skip_if_dest_has_namespace: false },
+        LangMergeRules {
+            import_like: &[],
+            named_like: &["function"],
+            skip_if_dest_has_namespace: false,
+        },
         "lua",
     )
 }
@@ -367,7 +388,11 @@ fn merge_bash(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         dest_bytes,
         src_bytes,
         tree_sitter_bash::LANGUAGE.into(),
-        LangMergeRules { import_like: &[], named_like: &["function"], skip_if_dest_has_namespace: false },
+        LangMergeRules {
+            import_like: &[],
+            named_like: &["function"],
+            skip_if_dest_has_namespace: false,
+        },
         "bash",
     )
 }
@@ -377,7 +402,11 @@ fn merge_zsh(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         dest_bytes,
         src_bytes,
         tree_sitter_zsh::LANGUAGE.into(),
-        LangMergeRules { import_like: &[], named_like: &["function"], skip_if_dest_has_namespace: false },
+        LangMergeRules {
+            import_like: &[],
+            named_like: &["function"],
+            skip_if_dest_has_namespace: false,
+        },
         "zsh",
     )
 }
@@ -435,7 +464,10 @@ fn merge_tree_sitter_named_top_level(
     let dest_items = ts_top_level_items(dest_root, dest_str.as_bytes(), rules, false);
     let dest_has_namespace = dest_items.iter().any(|i| i.is_namespace);
     if rules.skip_if_dest_has_namespace && dest_has_namespace {
-        debug!(lang = label, "namespace present in dest; skip namespace merges");
+        debug!(
+            lang = label,
+            "namespace present in dest; skip namespace merges"
+        );
     }
 
     let insertion_byte = ts_import_insertion_byte(&dest_items);
@@ -447,7 +479,10 @@ fn merge_tree_sitter_named_top_level(
         }
         if item.is_named {
             if let Some(name) = &item.name {
-                dest_keys.insert(TsKey::Named { kind: item.kind.clone(), name: name.clone() });
+                dest_keys.insert(TsKey::Named {
+                    kind: item.kind.clone(),
+                    name: name.clone(),
+                });
             }
         }
     }
@@ -469,7 +504,10 @@ fn merge_tree_sitter_named_top_level(
 
         if item.is_named {
             let Some(name) = item.name else { continue };
-            let key = TsKey::Named { kind: item.kind, name };
+            let key = TsKey::Named {
+                kind: item.kind,
+                name,
+            };
             if dest_keys.contains(&key) {
                 continue;
             }
@@ -485,7 +523,11 @@ fn merge_tree_sitter_named_top_level(
     let mut out = dest_bytes.to_vec();
 
     if !missing_imports.is_empty() {
-        debug!(lang = label, added = missing_imports.len(), "insert missing imports");
+        debug!(
+            lang = label,
+            added = missing_imports.len(),
+            "insert missing imports"
+        );
         let at = insertion_byte.min(out.len());
         let mut merged = Vec::with_capacity(out.len() + 256);
         merged.extend_from_slice(&out[..at]);
@@ -503,7 +545,11 @@ fn merge_tree_sitter_named_top_level(
     }
 
     if !missing_named.is_empty() {
-        debug!(lang = label, added = missing_named.len(), "append missing named items");
+        debug!(
+            lang = label,
+            added = missing_named.len(),
+            "append missing named items"
+        );
         if !out.is_empty() && *out.last().unwrap() != b'\n' {
             out.push(b'\n');
         }
@@ -550,7 +596,11 @@ fn ts_top_level_items(
         let is_import = ts_is_import_like(&child, &kind_lower, rules, bytes);
         let is_named = !is_import && contains_any(&kind_lower, rules.named_like);
 
-        let name = if is_named { ts_item_name(&child, bytes) } else { None };
+        let name = if is_named {
+            ts_item_name(&child, bytes)
+        } else {
+            None
+        };
 
         out.push(TsTopLevelItem {
             kind: kind.to_string(),
@@ -574,7 +624,8 @@ fn ts_import_insertion_byte(items: &[TsTopLevelItem]) -> usize {
             break;
         }
         let is_comment_like = item.kind_lower.contains("comment");
-        let is_shebang_like = item.kind_lower.contains("shebang") || item.kind_lower.contains("hash_bang");
+        let is_shebang_like =
+            item.kind_lower.contains("shebang") || item.kind_lower.contains("hash_bang");
         if item.is_namespace || item.is_import || is_comment_like || is_shebang_like {
             insert_after = item.end_byte;
             continue;
@@ -585,7 +636,9 @@ fn ts_import_insertion_byte(items: &[TsTopLevelItem]) -> usize {
 }
 
 fn contains_any(haystack: &str, needles: &'static [&'static str]) -> bool {
-    needles.iter().any(|n| !n.is_empty() && haystack.contains(n))
+    needles
+        .iter()
+        .any(|n| !n.is_empty() && haystack.contains(n))
 }
 
 fn ts_is_import_like(
@@ -599,7 +652,9 @@ fn ts_is_import_like(
     }
 
     // ruby: `require "x"` often parses as a call/command rather than a `require` node kind.
-    if rules.import_like.iter().any(|s| *s == "require") && (kind_lower == "call" || kind_lower == "command") {
+    if rules.import_like.iter().any(|s| *s == "require")
+        && (kind_lower == "call" || kind_lower == "command")
+    {
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
             if child.kind() == "identifier" {
@@ -667,7 +722,11 @@ fn merge_tree_sitter_text_top_level(
         return Some(dest_bytes.to_vec());
     }
 
-    debug!(lang = label, added = out_items.len(), "append missing top-level blocks");
+    debug!(
+        lang = label,
+        added = out_items.len(),
+        "append missing top-level blocks"
+    );
     let mut out = String::new();
     out.push_str(dest_str);
     if !out.ends_with('\n') && !out.is_empty() {
@@ -681,7 +740,11 @@ fn merge_tree_sitter_text_top_level(
     Some(out.into_bytes())
 }
 
-fn ts_text_keys(root: tree_sitter::Node<'_>, bytes: &[u8], substrings: &'static [&'static str]) -> HashSet<String> {
+fn ts_text_keys(
+    root: tree_sitter::Node<'_>,
+    bytes: &[u8],
+    substrings: &'static [&'static str],
+) -> HashSet<String> {
     let mut keys = HashSet::new();
     let mut cursor = root.walk();
     for child in root.named_children(&mut cursor) {
@@ -695,7 +758,11 @@ fn ts_text_keys(root: tree_sitter::Node<'_>, bytes: &[u8], substrings: &'static 
     keys
 }
 
-fn ts_text_items(root: tree_sitter::Node<'_>, bytes: &[u8], substrings: &'static [&'static str]) -> Vec<(String, String)> {
+fn ts_text_items(
+    root: tree_sitter::Node<'_>,
+    bytes: &[u8],
+    substrings: &'static [&'static str],
+) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut cursor = root.walk();
     for child in root.named_children(&mut cursor) {
@@ -741,7 +808,11 @@ fn merge_markdown_sections(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8
         return Some(dest_bytes.to_vec());
     }
 
-    debug!(lang = "markdown", added = additions.len(), "append missing heading sections");
+    debug!(
+        lang = "markdown",
+        added = additions.len(),
+        "append missing heading sections"
+    );
     let mut out = String::new();
     out.push_str(dest);
     if !out.ends_with('\n') && !out.is_empty() {
@@ -797,7 +868,10 @@ fn markdown_sections(root: tree_sitter::Node<'_>, bytes: &[u8]) -> Vec<MdSection
 
     let mut sections = Vec::new();
     for (idx, (start, key, level)) in headings.iter().enumerate() {
-        let next_start = headings.get(idx + 1).map(|(s, _, _)| *s).unwrap_or(bytes.len());
+        let next_start = headings
+            .get(idx + 1)
+            .map(|(s, _, _)| *s)
+            .unwrap_or(bytes.len());
         let text = String::from_utf8_lossy(&bytes[*start..next_start]).to_string();
 
         // Collect headings inside this section so if we add it, we don't re-add nested headings later.
@@ -811,7 +885,11 @@ fn markdown_sections(root: tree_sitter::Node<'_>, bytes: &[u8]) -> Vec<MdSection
             }
         }
         inner.insert(0, key.clone());
-        sections.push(MdSection { heading_key: key.clone(), heading_keys_in_section: inner, text });
+        sections.push(MdSection {
+            heading_key: key.clone(),
+            heading_keys_in_section: inner,
+            text,
+        });
     }
     sections
 }
@@ -820,7 +898,10 @@ fn markdown_heading_key(node: tree_sitter::Node<'_>, bytes: &[u8]) -> Option<Str
     markdown_heading_key_and_level(node, bytes).map(|(k, _)| k)
 }
 
-fn markdown_heading_key_and_level(node: tree_sitter::Node<'_>, bytes: &[u8]) -> Option<(String, usize)> {
+fn markdown_heading_key_and_level(
+    node: tree_sitter::Node<'_>,
+    bytes: &[u8],
+) -> Option<(String, usize)> {
     let text = node.utf8_text(bytes).ok()?;
     let first_line = text.lines().next().unwrap_or("").trim();
     if first_line.starts_with('#') {
@@ -850,7 +931,9 @@ fn merge_html_assets(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
     let src = std::str::from_utf8(src_bytes).ok()?;
 
     let mut parser = tree_sitter::Parser::new();
-    parser.set_language(&tree_sitter_html::LANGUAGE.into()).ok()?;
+    parser
+        .set_language(&tree_sitter_html::LANGUAGE.into())
+        .ok()?;
 
     let dest_tree = parser.parse(dest, None)?;
     let src_tree = parser.parse(src, None)?;
@@ -870,7 +953,11 @@ fn merge_html_assets(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         return Some(dest_bytes.to_vec());
     }
 
-    debug!(lang = "html", added = additions.len(), "append missing html assets");
+    debug!(
+        lang = "html",
+        added = additions.len(),
+        "append missing html assets"
+    );
     let mut out = String::new();
     out.push_str(dest);
     if !out.ends_with('\n') && !out.is_empty() {
@@ -924,12 +1011,18 @@ fn html_asset_from_element(node: tree_sitter::Node<'_>, bytes: &[u8]) -> Option<
         "script" => {
             let src = html_attr_value(start_tag, "src", bytes)?;
             let text = node.utf8_text(bytes).ok()?.to_string();
-            Some(HtmlAsset { key: format!("script:{}", normalize_ws(&src)), text })
+            Some(HtmlAsset {
+                key: format!("script:{}", normalize_ws(&src)),
+                text,
+            })
         }
         "link" => {
             let href = html_attr_value(start_tag, "href", bytes)?;
             let text = node.utf8_text(bytes).ok()?.to_string();
-            Some(HtmlAsset { key: format!("link:{}", normalize_ws(&href)), text })
+            Some(HtmlAsset {
+                key: format!("link:{}", normalize_ws(&href)),
+                text,
+            })
         }
         _ => None,
     }
@@ -950,7 +1043,13 @@ fn html_tag_name(node: tree_sitter::Node<'_>, bytes: &[u8]) -> Option<String> {
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
         if child.kind() == "tag_name" {
-            return Some(child.utf8_text(bytes).ok()?.to_string().to_ascii_lowercase());
+            return Some(
+                child
+                    .utf8_text(bytes)
+                    .ok()?
+                    .to_string()
+                    .to_ascii_lowercase(),
+            );
         }
     }
     None
