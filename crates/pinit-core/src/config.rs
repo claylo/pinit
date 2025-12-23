@@ -311,11 +311,11 @@ fn yaml_to_config(path: &Path, root: &rust_yaml::Value) -> Result<Config, Config
         });
     };
 
-    let mut cfg = Config::default();
-
-    cfg.common = yaml_get_string(map, "common");
-
-    cfg.license = yaml_get(map, "license").and_then(|v| yaml_to_license(v));
+    let mut cfg = Config {
+        common: yaml_get_string(map, "common"),
+        license: yaml_get(map, "license").and_then(yaml_to_license),
+        ..Config::default()
+    };
 
     if let Some(sources) = yaml_get_seq(map, "sources") {
         for source in sources {
@@ -474,9 +474,7 @@ fn yaml_as_vec_of_strings(y: &rust_yaml::Value) -> Option<Vec<String>> {
         rust_yaml::Value::Sequence(seq) => {
             let mut out = Vec::new();
             for item in seq {
-                let Some(s) = yaml_as_string(item) else {
-                    return None;
-                };
+                let s = yaml_as_string(item)?;
                 out.push(s);
             }
             Some(out)
@@ -544,10 +542,10 @@ impl Config {
 
         if self.templates.contains_key(name) {
             let mut templates = Vec::new();
-            if let Some(common) = self.common.as_deref() {
-                if common != name {
-                    templates.push(common.to_string());
-                }
+            if let Some(common) = self.common.as_deref()
+                && common != name
+            {
+                templates.push(common.to_string());
             }
             templates.push(name.to_string());
             return Some(ResolvedRecipe {
@@ -734,7 +732,7 @@ templates:
             Some("42")
         );
         assert!(
-            yaml_as_string(&rust_yaml::Value::Float(3.14))
+            yaml_as_string(&rust_yaml::Value::Float(std::f64::consts::PI))
                 .unwrap()
                 .starts_with("3.14")
         );

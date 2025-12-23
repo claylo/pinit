@@ -264,7 +264,9 @@ pub fn apply_generated_file(
     let git_ignore = GitIgnore::detect(dest_dir)?;
     if let Some(g) = &git_ignore {
         let query = format_git_rel(rel_path, false);
-        if g.ignored_set(&[query.clone()])?.contains(&query) {
+        if g.ignored_set(std::slice::from_ref(&query))?
+            .contains(&query)
+        {
             trace!(path = %query, "ignored (git)");
             return Ok(ApplyReport {
                 ignored_paths: 1,

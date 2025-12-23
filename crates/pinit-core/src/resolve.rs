@@ -252,8 +252,7 @@ fn looks_like_hex(s: &str) -> bool {
     if s.len() < 7 {
         return false;
     }
-    s.bytes()
-        .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F'))
+    s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn git(args: &[&str], cwd: Option<&Path>) -> Result<(), ResolveError> {

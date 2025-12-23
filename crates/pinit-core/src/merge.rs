@@ -163,10 +163,10 @@ fn merge_envrc(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
         if have_lines.contains(line) {
             continue;
         }
-        if let Some(var) = envrc_var(line) {
-            if have_vars.contains(&var) {
-                continue;
-            }
+        if let Some(var) = envrc_var(line)
+            && have_vars.contains(&var)
+        {
+            continue;
         }
         to_add.push(line);
     }
@@ -253,19 +253,16 @@ fn merge_yaml(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn merge_yaml_value(dest: &mut rust_yaml::Value, src: &rust_yaml::Value) {
-    match (dest, src) {
-        (rust_yaml::Value::Mapping(dest_map), rust_yaml::Value::Mapping(src_map)) => {
-            for (k, v) in src_map.iter() {
-                if !dest_map.contains_key(k) {
-                    dest_map.insert(k.clone(), v.clone());
-                    continue;
-                }
-                if let Some(dest_v) = dest_map.get_mut(k) {
-                    merge_yaml_value(dest_v, v);
-                }
+    if let (rust_yaml::Value::Mapping(dest_map), rust_yaml::Value::Mapping(src_map)) = (dest, src) {
+        for (k, v) in src_map.iter() {
+            if !dest_map.contains_key(k) {
+                dest_map.insert(k.clone(), v.clone());
+                continue;
+            }
+            if let Some(dest_v) = dest_map.get_mut(k) {
+                merge_yaml_value(dest_v, v);
             }
         }
-        _ => {}
     }
 }
 
@@ -477,13 +474,13 @@ fn merge_tree_sitter_named_top_level(
         if item.is_import {
             dest_keys.insert(TsKey::Text(normalize_ws(&item.text)));
         }
-        if item.is_named {
-            if let Some(name) = &item.name {
-                dest_keys.insert(TsKey::Named {
-                    kind: item.kind.clone(),
-                    name: name.clone(),
-                });
-            }
+        if item.is_named
+            && let Some(name) = &item.name
+        {
+            dest_keys.insert(TsKey::Named {
+                kind: item.kind.clone(),
+                name: name.clone(),
+            });
         }
     }
 
@@ -652,9 +649,7 @@ fn ts_is_import_like(
     }
 
     // ruby: `require "x"` often parses as a call/command rather than a `require` node kind.
-    if rules.import_like.iter().any(|s| *s == "require")
-        && (kind_lower == "call" || kind_lower == "command")
-    {
+    if rules.import_like.contains(&"require") && (kind_lower == "call" || kind_lower == "command") {
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
             if child.kind() == "identifier" {
@@ -676,10 +671,10 @@ fn ts_item_name(node: &tree_sitter::Node<'_>, src: &[u8]) -> Option<String> {
     if let Some(name) = node.child_by_field_name("name") {
         return Some(name.utf8_text(src).ok()?.to_string());
     }
-    if let Some(decl) = node.child_by_field_name("declaration") {
-        if let Some(name) = ts_item_name(&decl, src) {
-            return Some(name);
-        }
+    if let Some(decl) = node.child_by_field_name("declaration")
+        && let Some(name) = ts_item_name(&decl, src)
+    {
+        return Some(name);
     }
     // Many grammars use "identifier" nodes.
     let mut cursor = node.walk();
@@ -837,10 +832,10 @@ fn markdown_heading_set(root: tree_sitter::Node<'_>, bytes: &[u8]) -> HashSet<St
     let mut set = HashSet::new();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if node.kind().to_ascii_lowercase().contains("heading") {
-            if let Some(key) = markdown_heading_key(node, bytes) {
-                set.insert(key);
-            }
+        if node.kind().to_ascii_lowercase().contains("heading")
+            && let Some(key) = markdown_heading_key(node, bytes)
+        {
+            set.insert(key);
         }
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
@@ -854,10 +849,10 @@ fn markdown_sections(root: tree_sitter::Node<'_>, bytes: &[u8]) -> Vec<MdSection
     let mut headings = Vec::new();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if node.kind().to_ascii_lowercase().contains("heading") {
-            if let Some((key, level)) = markdown_heading_key_and_level(node, bytes) {
-                headings.push((node.start_byte(), key, level));
-            }
+        if node.kind().to_ascii_lowercase().contains("heading")
+            && let Some((key, level)) = markdown_heading_key_and_level(node, bytes)
+        {
+            headings.push((node.start_byte(), key, level));
         }
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {
@@ -990,10 +985,10 @@ fn html_assets(root: tree_sitter::Node<'_>, bytes: &[u8]) -> Vec<HtmlAsset> {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
         let kind = node.kind().to_ascii_lowercase();
-        if kind.contains("element") {
-            if let Some(asset) = html_asset_from_element(node, bytes) {
-                out.push(asset);
-            }
+        if kind.contains("element")
+            && let Some(asset) = html_asset_from_element(node, bytes)
+        {
+            out.push(asset);
         }
         let mut cursor = node.walk();
         for child in node.named_children(&mut cursor) {

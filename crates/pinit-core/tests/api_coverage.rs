@@ -28,7 +28,7 @@ fn covers_display_and_small_helpers() {
     };
     assert!(e.to_string().contains("git ignore check failed"));
 
-    let io = std::io::Error::new(std::io::ErrorKind::Other, "boom");
+    let io = std::io::Error::other("boom");
     let e = pinit_core::ApplyError::Io {
         path: PathBuf::from("x"),
         source: io,

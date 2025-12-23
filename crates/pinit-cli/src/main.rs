@@ -111,7 +111,7 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         template = %args.template,
         dir = %args.dir.display(),
         dry_run = args.dry_run,
-        git = %(args.no_git == false),
+        git = %(!args.no_git),
         branch = %args.branch,
         "new"
     );
