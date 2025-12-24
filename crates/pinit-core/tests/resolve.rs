@@ -226,10 +226,7 @@ fn resolve_errors_on_source_repo_missing() {
     let mut cfg = Config::default();
     cfg.sources.push(Source {
         name: "local".into(),
-        path: None,
-        repo: None,
-        git_ref: None,
-        subdir: None,
+        ..Default::default()
     });
     cfg.templates.insert(
         "t".into(),
