@@ -1,0 +1,20 @@
+# https://docs.cocogitto.io/
+
+[git_hooks.commit-msg]
+script = """#!/bin/sh
+set -e
+cog verify --file "$1"
+"""
+
+[git_hooks.pre-commit]
+script = """#!/bin/sh
+set -e
+cargo fmt --all --check
+cargo clippy -- -D warnings
+"""
+
+[git_hooks.pre-push]
+script = """#!/bin/sh
+set -e
+cargo test
+"""

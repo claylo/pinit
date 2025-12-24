@@ -27,6 +27,7 @@ It is intentionally exhaustive. :smile:
 * [9. License injection](#9-license-injection)
   * [9.1 Simple form (string)](#91-simple-form-string)
   * [9.2 Detailed form](#92-detailed-form)
+  * [FAQ: How do I include multiple licenses (e.g., MIT + Apache-2.0)?](#faq-how-do-i-include-multiple-licenses-eg-mit--apache-20)
 * [10. Apply behavior that affects configuration](#10-apply-behavior-that-affects-configuration)
   * [10.1 Apply by name vs path](#101-apply-by-name-vs-path)
   * [10.2 Merge strategy and flags](#102-merge-strategy-and-flags)
@@ -420,7 +421,6 @@ license = "MIT"
 [license]
 spdx = "Apache-2.0"
 output = "LICENSES/Apache-2.0.txt"  # must be relative
-year = "2025"
 name = "Jane Developer"
 args = { "project" = "Acme Tools" }
 ```
@@ -428,11 +428,20 @@ args = { "project" = "Acme Tools" }
 Rules:
 - `output` must be a **relative** path; absolute paths cause an error.
 - Default output path is `LICENSE`.
-- `year` and `name` are convenience fields used to fill SPDX variables:
+- `year` is optional and defaults to the current year if the license template supports it.
+- `name` is a convenience field used to fill SPDX variables:
   - `year` -> `year`
   - `name` -> `fullname` and `copyright holders`
 - `args` provides arbitrary SPDX template variables.
 - If an SPDX template variable is required but not provided, `pinit` errors.
+
+### FAQ: How do I include multiple licenses (e.g., MIT + Apache-2.0)?
+
+`pinit` currently supports a single `license` entry, so it only renders one SPDX license file.
+If you need multiple licenses today, the simplest approach is:
+
+- Put `LICENSE-MIT` and `LICENSE-APACHE` directly in your template so they’re copied as files, **or**
+- Use `license.output` for one license (e.g., `LICENSE-MIT`) and keep the other license file in the template.
 
 Where it applies:
 - License injection only happens when a template is resolved **by name**.

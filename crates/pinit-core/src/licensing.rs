@@ -45,8 +45,10 @@ pub fn render_spdx_license(
         })?;
 
     let raw = parsed.text();
-    let expanded = expand_spdx_template(spdx, raw, template_args)?;
-    let expanded = replace_angle_placeholders(&expanded, template_args);
+    let mut args = template_args.clone();
+    maybe_insert_current_year(raw, &mut args);
+    let expanded = expand_spdx_template(spdx, raw, &args)?;
+    let expanded = replace_angle_placeholders(&expanded, &args);
     Ok(RenderedLicense {
         spdx: spdx.to_string(),
         text: expanded,
@@ -236,6 +238,50 @@ fn replace_angle_placeholders(s: &str, template_args: &BTreeMap<String, String>)
     out
 }
 
+fn maybe_insert_current_year(template: &str, template_args: &mut BTreeMap<String, String>) {
+    if template_args.contains_key("year") {
+        return;
+    }
+    if !template_supports_year(template) {
+        return;
+    }
+    template_args.insert("year".to_string(), current_year_string());
+}
+
+fn template_supports_year(template: &str) -> bool {
+    if template.contains("<year>") {
+        return true;
+    }
+    let lowered = template.to_ascii_lowercase();
+    lowered.contains("name=\"year\"")
+        || lowered.contains("name='year'")
+        || lowered.contains("name=year")
+}
+
+fn current_year_string() -> String {
+    let now = std::time::SystemTime::now();
+    let duration = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let days = (duration.as_secs() / 86_400) as i64;
+    let year = civil_from_days(days).0;
+    year.to_string()
+}
+
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = mp + if mp < 10 { 3 } else { -9 };
+    let year = y + if m <= 2 { 1 } else { 0 };
+    (year as i32, m as u32, d as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,5 +340,15 @@ mod tests {
         args.insert("year".to_string(), "2025".to_string());
         let out = replace_angle_placeholders("Copyright <year> <unknown>", &args);
         assert_eq!(out, "Copyright 2025 <unknown>");
+    }
+
+    #[test]
+    fn renders_mit_with_auto_year_when_missing() {
+        let mut args = BTreeMap::new();
+        args.insert("copyright holders".to_string(), "Clay".to_string());
+        let rendered = render_spdx_license("MIT", &args).unwrap();
+        let year = current_year_string();
+        assert!(rendered.text.contains(&year));
+        assert!(rendered.text.contains("Clay"));
     }
 }
