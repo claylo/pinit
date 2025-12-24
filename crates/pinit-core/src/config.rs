@@ -19,7 +19,7 @@ use yaml_rust2::{Yaml, YamlLoader, yaml::Hash};
 /// Parsed configuration file contents.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct Config {
-    pub common: Option<String>,
+    pub base_template: Option<String>,
 
     pub license: Option<LicenseDef>,
 
@@ -317,7 +317,7 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
     };
 
     let mut cfg = Config {
-        common: yaml_get_string(map, "common"),
+        base_template: yaml_get_string(map, "base_template"),
         license: yaml_get(map, "license").and_then(yaml_to_license),
         ..Config::default()
     };
@@ -535,10 +535,10 @@ impl Config {
 
         if self.templates.contains_key(name) {
             let mut templates = Vec::new();
-            if let Some(common) = self.common.as_deref()
-                && common != name
+            if let Some(base_template) = self.base_template.as_deref()
+                && base_template != name
             {
-                templates.push(common.to_string());
+                templates.push(base_template.to_string());
             }
             templates.push(name.to_string());
             return Some(ResolvedRecipe {
@@ -570,7 +570,7 @@ mod tests {
     fn parses_toml_and_resolves_target() {
         let cfg: Config = toml::from_str(
             r#"
-common = "common"
+base_template = "common"
 
 [templates]
 common = "common"
@@ -592,7 +592,7 @@ rust = ["common", "rust"]
     #[test]
     fn parses_yaml_and_resolves_target() {
         let yaml = r#"
-common: common
+base_template: common
 license: MIT
 templates:
   common: common
@@ -740,7 +740,10 @@ templates:
     #[test]
     fn yaml_to_config_handles_sources_templates_targets_and_recipes() {
         let mut root = Hash::new();
-        root.insert(yaml_key("common"), Yaml::String("common".to_string()));
+        root.insert(
+            yaml_key("base_template"),
+            Yaml::String("common".to_string()),
+        );
 
         let mut lic_map = Hash::new();
         lic_map.insert(yaml_key("id"), Yaml::String("MIT".to_string()));
@@ -804,7 +807,7 @@ templates:
         root.insert(yaml_key("recipes"), Yaml::Hash(recipes));
 
         let cfg = yaml_to_config(Path::new("x"), &Yaml::Hash(root)).unwrap();
-        assert_eq!(cfg.common.as_deref(), Some("common"));
+        assert_eq!(cfg.base_template.as_deref(), Some("common"));
         assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
         assert_eq!(
             cfg.license
