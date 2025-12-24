@@ -50,7 +50,10 @@ fn apply_generated_creates_then_skips_identical() {
         &dest,
         "LICENSE",
         b"hello\n",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -61,7 +64,10 @@ fn apply_generated_creates_then_skips_identical() {
         &dest,
         "LICENSE",
         b"hello\n",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -80,7 +86,10 @@ fn apply_generated_overwrite_updates_existing() {
         &dest,
         "LICENSE",
         b"new\n",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -100,7 +109,10 @@ fn apply_generated_merge_or_skip_does_not_write() {
         &dest,
         "LICENSE",
         b"new\n",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -119,7 +131,10 @@ fn apply_generated_respects_always_ignore() {
         &dest,
         ".DS_Store",
         b"x",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -138,7 +153,10 @@ fn apply_generated_rel_path_empty_is_noop() {
         &dest,
         "",
         b"x",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -156,7 +174,10 @@ fn apply_generated_creates_dest_dir_when_missing() {
         &dest,
         "LICENSE",
         b"hello\n",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -181,7 +202,10 @@ fn apply_generated_errors_when_dest_is_symlink() {
         &dest,
         "LICENSE",
         b"x",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap_err();
@@ -216,7 +240,10 @@ fn apply_generated_respects_destination_gitignore() {
         &dest,
         "LICENSE",
         b"x",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -236,7 +263,10 @@ fn apply_generated_errors_when_dest_is_not_dir() {
         &dest,
         "LICENSE",
         b"x",
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap_err();

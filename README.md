@@ -19,8 +19,8 @@ pinit new rust myproj
 ## Usage
 
 ```text
-pinit apply <template|path> [dest] [--dry-run] [--yes] [--overwrite|--merge|--skip]
-pinit new <template|path> <dir> [--dry-run] [--yes] [--no-git] [--branch main]
+pinit apply <template|path> [dest] [--dry-run] [--yes] [--overwrite|--merge|--skip] [--override <glob>...] [--override-action <overwrite|merge|skip>]
+pinit new <template|path> <dir> [--dry-run] [--yes] [--no-git] [--branch main] [--override <glob>...] [--override-action <overwrite|merge|skip>]
 pinit list
 ```
 
@@ -28,6 +28,7 @@ Notes:
 - `--dry-run` computes changes without writing.
 - `--yes` makes the run non-interactive (default action is merge when available).
 - The selected action handles existing files: overwrite, additive merge, or skip.
+- `--override` forces precedence for matching paths (last-wins).
 - Destination gitignore rules are honored to avoid copying ignored files.
 
 ## Configuration
