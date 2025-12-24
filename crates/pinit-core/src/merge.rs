@@ -3,8 +3,8 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use rust_yaml::Emitter;
 use tracing::debug;
+use yaml_rust2::{Yaml, YamlEmitter, YamlLoader};
 
 pub fn merge_file(rel_path: &Path, dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
     let file_name = rel_path
@@ -240,20 +240,26 @@ fn merge_yaml(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
     let dest_str = std::str::from_utf8(dest_bytes).ok()?;
     let src_str = std::str::from_utf8(src_bytes).ok()?;
 
-    let yaml = rust_yaml::Yaml::new();
-    let mut dest_val = yaml.load_str(dest_str).ok()?;
-    let src_val = yaml.load_str(src_str).ok()?;
+    let mut dest_docs = YamlLoader::load_from_str(dest_str).ok()?;
+    let src_docs = YamlLoader::load_from_str(src_str).ok()?;
 
-    merge_yaml_value(&mut dest_val, &src_val);
+    let Some(dest_val) = dest_docs.get_mut(0) else {
+        return None;
+    };
+    let Some(src_val) = src_docs.get(0) else {
+        return None;
+    };
 
-    let mut out = Vec::new();
-    let mut emitter = rust_yaml::BasicEmitter::new();
-    emitter.emit(&dest_val, &mut out).ok()?;
-    Some(out)
+    merge_yaml_value(dest_val, src_val);
+
+    let mut out = String::new();
+    let mut emitter = YamlEmitter::new(&mut out);
+    emitter.dump(dest_val).ok()?;
+    Some(out.into_bytes())
 }
 
-fn merge_yaml_value(dest: &mut rust_yaml::Value, src: &rust_yaml::Value) {
-    if let (rust_yaml::Value::Mapping(dest_map), rust_yaml::Value::Mapping(src_map)) = (dest, src) {
+fn merge_yaml_value(dest: &mut Yaml, src: &Yaml) {
+    if let (Yaml::Hash(dest_map), Yaml::Hash(src_map)) = (dest, src) {
         for (k, v) in src_map.iter() {
             if !dest_map.contains_key(k) {
                 dest_map.insert(k.clone(), v.clone());

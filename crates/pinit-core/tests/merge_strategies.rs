@@ -103,7 +103,7 @@ fn merge_yaml_inserts_missing_mapping_keys() {
     );
     assert_eq!(report.updated_files, 1);
     assert!(out.contains("x: 1"));
-    assert!(out.contains("y: 3"));
+    assert!(out.contains("y: 3") || out.contains("\"y\": 3"));
     assert!(out.contains("b: 4"));
 }
 
