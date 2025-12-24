@@ -56,7 +56,7 @@ fn load_config_unknown_extension_falls_back_to_toml_then_yaml() {
     fs::write(
         &path,
         r#"
-common = "common"
+base_template = "common"
 
 [templates]
 common = "/tmp/common"
@@ -65,7 +65,7 @@ common = "/tmp/common"
     .unwrap();
 
     let (_, cfg) = pinit_core::config::load_config(Some(&path)).unwrap();
-    assert_eq!(cfg.common.as_deref(), Some("common"));
+    assert_eq!(cfg.base_template.as_deref(), Some("common"));
     let _ = fs::remove_dir_all(&root);
 }
 

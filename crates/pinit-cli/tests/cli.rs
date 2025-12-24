@@ -59,7 +59,7 @@ fn list_with_config_shows_templates_targets_and_recipes() {
     fs::write(
         &cfg,
         r#"
-common = "common"
+base_template = "common"
 
 [templates]
 common = "/tmp/common"
@@ -93,7 +93,7 @@ fn list_recipe_with_no_templates_prints_dash() {
     fs::write(
         &cfg,
         r#"
-common = "common"
+base_template = "common"
 
 [templates]
 common = "/tmp/common"

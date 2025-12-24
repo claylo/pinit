@@ -36,7 +36,7 @@ Notes:
 
 TOML example:
 ```toml
-common = "common"
+base_template = "common"
 
 [[sources]]
 name = "local"
@@ -55,7 +55,7 @@ templates = ["rust"]
 
 YAML example:
 ```yaml
-common: common
+base_template: common
 sources:
   - name: local
     path: /Users/me/src/pinit/templates
@@ -119,4 +119,3 @@ But:
 IKR? So crazy. :roll_eyes:
 
 No, really: A whole bunch of folks use [Subversion](https://subversion.apache.org/). There's a thing called [Piper](https://cacm.acm.org/magazines/2016/7/204032-why-google-stores-billions-of-lines-of-code-in-a-single-repository/fulltext) that houses a gazillion lines of code. There's Perforce, Mercurial, and ... look at [this list](https://en.wikipedia.org/wiki/Comparison_of_version-control_software).
-
