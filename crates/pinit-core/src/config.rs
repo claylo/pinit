@@ -111,7 +111,27 @@ pub struct Source {
     #[serde(rename = "ref")]
     pub git_ref: Option<String>,
 
+    pub git_protocol: Option<GitProtocol>,
+
     pub subdir: Option<PathBuf>,
+}
+
+/// Git transport protocol for shorthand repository identifiers.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GitProtocol {
+    Ssh,
+    Https,
+}
+
+impl GitProtocol {
+    fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "ssh" => Some(Self::Ssh),
+            "https" => Some(Self::Https),
+            _ => None,
+        }
+    }
 }
 
 /// Template definition that resolves to a directory.
@@ -334,12 +354,15 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
             let path_val = yaml_get_string(source_map, "path").map(PathBuf::from);
             let repo = yaml_get_string(source_map, "repo");
             let git_ref = yaml_get_string(source_map, "ref");
+            let git_protocol =
+                yaml_get_string(source_map, "git_protocol").and_then(|s| GitProtocol::parse(&s));
             let subdir = yaml_get_string(source_map, "subdir").map(PathBuf::from);
             cfg.sources.push(Source {
                 name,
                 path: path_val,
                 repo,
                 git_ref,
+                git_protocol,
                 subdir,
             });
         }
@@ -757,6 +780,7 @@ templates:
         let mut src_ok = Hash::new();
         src_ok.insert(yaml_key("name"), Yaml::String("local".to_string()));
         src_ok.insert(yaml_key("path"), Yaml::String("/tmp/templates".to_string()));
+        src_ok.insert(yaml_key("git_protocol"), Yaml::String("https".to_string()));
         let src_missing_name = Yaml::Hash(Hash::new());
         root.insert(
             yaml_key("sources"),
@@ -819,6 +843,7 @@ templates:
             "LICENSES/MIT.txt"
         );
         assert_eq!(cfg.sources.len(), 1);
+        assert_eq!(cfg.sources[0].git_protocol, Some(GitProtocol::Https));
         assert!(cfg.templates.contains_key("rust"));
         assert!(cfg.templates.contains_key("common"));
         assert!(!cfg.templates.contains_key("bad"));

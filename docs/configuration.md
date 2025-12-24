@@ -167,9 +167,10 @@ Source object fields:
 |---------|--------|---------|
 | `name`  | string | Source identifier used by templates |
 | `path`  | string | Local root directory |
-| `repo`  | string | Git repo URL or path |
-| `ref`   | string | Git ref (`HEAD`, branch, tag, commit) |
-| `subdir`| string | Subdirectory inside the repo |
+| `repo`         | string | Git repo URL or path |
+| `git_protocol`| string | `ssh` or `https` for GitHub shorthand repos (default: `ssh`) |
+| `ref`          | string | Git ref (`HEAD`, branch, tag, commit) |
+| `subdir`       | string | Subdirectory inside the repo |
 
 Resolution rules:
 - If `path` is set, `pinit` uses it and ignores `repo`.
@@ -201,23 +202,29 @@ Resolved directory:
 
 ```toml
 [[sources]]
-name = "github"
-repo = "https://github.com/acme/pinit-templates.git"
-ref = "v2.3.1"          # branch/tag/commit; defaults to HEAD
-subdir = "templates"    # optional
+name = "remote"
+repo = "acme/pinit-templates"
+git_protocol = "ssh"    # optional; default is ssh
+ref = "v2.3.1"           # branch/tag/commit; defaults to HEAD
+subdir = "templates"     # optional
 ```
 
 Template:
 
 ```toml
 [templates]
-node = { source = "github", path = "node" }
+node = { source = "remote", path = "node" }
 ```
 
 Resolution:
 - Repository is cloned into the cache.
 - `ref` is checked out in **detached HEAD** mode.
 - If `ref` is a branch name and checkout fails, `origin/<ref>` is attempted.
+
+GitHub shorthand:
+- If `repo` is in the form `owner/name` (for example `acme/pinit-templates`), `pinit` assumes GitHub.
+- By default it expands to `git@github.com:owner/name.git`.
+- Set `git_protocol = "https"` to expand to `https://github.com/owner/name.git` instead.
 
 ### 5.3 Cache location for git sources
 
@@ -451,7 +458,7 @@ name = "local"
 path = "/Users/me/templates"
 
 [[sources]]
-name = "github"
+name = "remote"
 repo = "https://github.com/acme/pinit-templates.git"
 ref = "v1.8.0"
 subdir = "templates"
@@ -459,9 +466,9 @@ subdir = "templates"
 [templates]
 common = { source = "local", path = "common" }
 rust = { source = "local", path = "rust" }
-node = { source = "github", path = "node" }
-php = { source = "github", path = "php" }
-python = { source = "github", path = "python" }
+node = { source = "remote", path = "node" }
+php = { source = "remote", path = "php" }
+python = { source = "remote", path = "python" }
 ```
 
 ### 11.4 Stack templates per language (targets)
@@ -573,14 +580,14 @@ base_template: common
 sources:
   - name: local
     path: /Users/me/templates
-  - name: github
+  - name: remote
     repo: https://github.com/acme/pinit-templates.git
     ref: v1.8.0
     subdir: templates
 templates:
   common: { source: local, path: common }
   rust: { source: local, path: rust }
-  node: { source: github, path: node }
+  node: { source: remote, path: node }
 targets:
   rust: [common, rust]
   node: [common, node]

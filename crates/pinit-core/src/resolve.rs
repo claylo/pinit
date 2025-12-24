@@ -12,7 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::config::{Config, TemplateDef};
+use crate::config::{Config, GitProtocol, TemplateDef};
 
 use tracing::{debug, instrument};
 
@@ -173,9 +173,10 @@ impl TemplateResolver {
                 source: source.name.clone(),
             });
         };
+        let repo = normalize_repo(repo, source.git_protocol.unwrap_or(GitProtocol::Ssh));
         let git_ref = source.git_ref.as_deref().unwrap_or("HEAD");
         debug!(template = template_name, source = source_name, repo = %repo, git_ref = %git_ref, "resolve git");
-        let repo_root = self.ensure_repo_checkout(repo, git_ref)?;
+        let repo_root = self.ensure_repo_checkout(&repo, git_ref)?;
         let base = match &source.subdir {
             Some(subdir) => repo_root.join(subdir),
             None => repo_root,
@@ -299,6 +300,51 @@ fn ensure_is_dir(path: &Path) -> Result<(), ResolveError> {
     Ok(())
 }
 
+fn normalize_repo(repo: &str, protocol: GitProtocol) -> String {
+    if is_github_shorthand(repo) {
+        match protocol {
+            GitProtocol::Ssh => format!("git@github.com:{repo}.git"),
+            GitProtocol::Https => format!("https://github.com/{repo}.git"),
+        }
+    } else {
+        repo.to_string()
+    }
+}
+
+fn is_github_shorthand(repo: &str) -> bool {
+    if repo.is_empty()
+        || repo.contains("://")
+        || repo.contains(':')
+        || repo.starts_with("git@")
+        || repo.contains('\\')
+    {
+        return false;
+    }
+
+    let mut parts = repo.split('/');
+    let Some(owner) = parts.next() else {
+        return false;
+    };
+    let Some(name) = parts.next() else {
+        return false;
+    };
+    if parts.next().is_some() {
+        return false;
+    }
+    if owner.is_empty() || name.is_empty() || name.ends_with(".git") {
+        return false;
+    }
+    if !is_repo_component(owner) || !is_repo_component(name) {
+        return false;
+    }
+    true
+}
+
+fn is_repo_component(s: &str) -> bool {
+    s.bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
+}
+
 /// Return true if the path appears to be a git repository checkout.
 pub fn path_is_git_dir(path: &Path) -> bool {
     path.join(".git").is_dir() || (path.file_name() == Some(OsStr::new(".git")))
@@ -334,5 +380,25 @@ mod tests {
         let b = cache_key("repo", "ref");
         assert_eq!(a, b);
         assert_ne!(a, cache_key("repo", "ref2"));
+    }
+
+    #[test]
+    fn normalize_repo_expands_github_shorthand_to_ssh() {
+        let repo = normalize_repo("foo/bar", GitProtocol::Ssh);
+        assert_eq!(repo, "git@github.com:foo/bar.git");
+    }
+
+    #[test]
+    fn normalize_repo_expands_github_shorthand_to_https() {
+        let repo = normalize_repo("foo/bar", GitProtocol::Https);
+        assert_eq!(repo, "https://github.com/foo/bar.git");
+    }
+
+    #[test]
+    fn normalize_repo_leaves_full_urls_untouched() {
+        let https = "https://github.com/foo/bar.git";
+        let ssh = "git@github.com:foo/bar.git";
+        assert_eq!(normalize_repo(https, GitProtocol::Ssh), https);
+        assert_eq!(normalize_repo(ssh, GitProtocol::Https), ssh);
     }
 }
