@@ -12,9 +12,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use indexmap::IndexMap;
 use serde::Deserialize;
 use tracing::{debug, instrument};
+use yaml_rust2::{Yaml, YamlLoader, yaml::Hash};
 
 /// Parsed configuration file contents.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -292,20 +292,25 @@ fn parse_toml(path: &Path, s: &str) -> Result<Config, ConfigError> {
 }
 
 fn parse_yaml(path: &Path, s: &str) -> Result<Config, ConfigError> {
-    // rust-yaml is intentionally used instead of serde_yaml (deprecated).
+    // yaml-rust2 is intentionally used instead of serde_yaml (deprecated).
     //
     // This is a minimal parser that supports the subset of YAML we need for config.
-    let yaml = rust_yaml::Yaml::new();
-    let doc = yaml.load_str(s).map_err(|e| ConfigError::ParseYaml {
+    let docs = YamlLoader::load_from_str(s).map_err(|e| ConfigError::ParseYaml {
         path: path.to_path_buf(),
         message: e.to_string(),
     })?;
+    let Some(doc) = docs.get(0) else {
+        return Err(ConfigError::ParseYaml {
+            path: path.to_path_buf(),
+            message: "empty YAML document".to_string(),
+        });
+    };
 
-    yaml_to_config(path, &doc)
+    yaml_to_config(path, doc)
 }
 
-fn yaml_to_config(path: &Path, root: &rust_yaml::Value) -> Result<Config, ConfigError> {
-    let rust_yaml::Value::Mapping(map) = root else {
+fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
+    let Yaml::Hash(map) = root else {
         return Err(ConfigError::YamlRootNotMapping {
             path: path.to_path_buf(),
         });
@@ -417,61 +422,49 @@ fn yaml_to_config(path: &Path, root: &rust_yaml::Value) -> Result<Config, Config
     Ok(cfg)
 }
 
-fn yaml_key(s: &str) -> rust_yaml::Value {
-    rust_yaml::Value::String(s.to_string())
+fn yaml_key(s: &str) -> Yaml {
+    Yaml::String(s.to_string())
 }
 
-fn yaml_get<'a>(
-    map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>,
-    key: &str,
-) -> Option<&'a rust_yaml::Value> {
+fn yaml_get<'a>(map: &'a Hash, key: &str) -> Option<&'a Yaml> {
     map.get(&yaml_key(key))
 }
 
-fn yaml_get_seq<'a>(
-    map: &'a IndexMap<rust_yaml::Value, rust_yaml::Value>,
-    key: &str,
-) -> Option<&'a Vec<rust_yaml::Value>> {
+fn yaml_get_seq<'a>(map: &'a Hash, key: &str) -> Option<&'a Vec<Yaml>> {
     yaml_get(map, key).and_then(|v| match v {
-        rust_yaml::Value::Sequence(seq) => Some(seq),
+        Yaml::Array(seq) => Some(seq),
         _ => None,
     })
 }
 
-fn yaml_get_string(
-    map: &IndexMap<rust_yaml::Value, rust_yaml::Value>,
-    key: &str,
-) -> Option<String> {
+fn yaml_get_string(map: &Hash, key: &str) -> Option<String> {
     yaml_get(map, key).and_then(yaml_as_string)
 }
 
-fn yaml_get_vec_of_strings(
-    map: &IndexMap<rust_yaml::Value, rust_yaml::Value>,
-    key: &str,
-) -> Option<Vec<String>> {
+fn yaml_get_vec_of_strings(map: &Hash, key: &str) -> Option<Vec<String>> {
     yaml_get(map, key).and_then(yaml_as_vec_of_strings)
 }
 
-fn yaml_as_mapping(y: &rust_yaml::Value) -> Option<&IndexMap<rust_yaml::Value, rust_yaml::Value>> {
+fn yaml_as_mapping(y: &Yaml) -> Option<&Hash> {
     match y {
-        rust_yaml::Value::Mapping(m) => Some(m),
+        Yaml::Hash(m) => Some(m),
         _ => None,
     }
 }
 
-fn yaml_as_string(y: &rust_yaml::Value) -> Option<String> {
+fn yaml_as_string(y: &Yaml) -> Option<String> {
     match y {
-        rust_yaml::Value::String(s) => Some(s.to_string()),
-        rust_yaml::Value::Int(i) => Some(i.to_string()),
-        rust_yaml::Value::Float(f) => Some(f.to_string()),
-        rust_yaml::Value::Bool(b) => Some(if *b { "true" } else { "false" }.to_string()),
+        Yaml::String(s) => Some(s.to_string()),
+        Yaml::Integer(i) => Some(i.to_string()),
+        Yaml::Real(f) => Some(f.to_string()),
+        Yaml::Boolean(b) => Some(if *b { "true" } else { "false" }.to_string()),
         _ => None,
     }
 }
 
-fn yaml_as_vec_of_strings(y: &rust_yaml::Value) -> Option<Vec<String>> {
+fn yaml_as_vec_of_strings(y: &Yaml) -> Option<Vec<String>> {
     match y {
-        rust_yaml::Value::Sequence(seq) => {
+        Yaml::Array(seq) => {
             let mut out = Vec::new();
             for item in seq {
                 let s = yaml_as_string(item)?;
@@ -483,7 +476,7 @@ fn yaml_as_vec_of_strings(y: &rust_yaml::Value) -> Option<Vec<String>> {
     }
 }
 
-fn yaml_to_license(y: &rust_yaml::Value) -> Option<LicenseDef> {
+fn yaml_to_license(y: &Yaml) -> Option<LicenseDef> {
     if let Some(s) = yaml_as_string(y) {
         return Some(LicenseDef::Spdx(s));
     }
@@ -720,127 +713,97 @@ templates:
     #[test]
     fn yaml_value_string_coercions() {
         assert_eq!(
-            yaml_as_string(&rust_yaml::Value::Bool(true)).as_deref(),
+            yaml_as_string(&Yaml::Boolean(true)).as_deref(),
             Some("true")
         );
         assert_eq!(
-            yaml_as_string(&rust_yaml::Value::Bool(false)).as_deref(),
+            yaml_as_string(&Yaml::Boolean(false)).as_deref(),
             Some("false")
         );
-        assert_eq!(
-            yaml_as_string(&rust_yaml::Value::Int(42)).as_deref(),
-            Some("42")
-        );
+        assert_eq!(yaml_as_string(&Yaml::Integer(42)).as_deref(), Some("42"));
         assert!(
-            yaml_as_string(&rust_yaml::Value::Float(std::f64::consts::PI))
+            yaml_as_string(&Yaml::Real(std::f64::consts::PI.to_string()))
                 .unwrap()
                 .starts_with("3.14")
         );
 
-        let seq = rust_yaml::Value::Sequence(vec![
-            rust_yaml::Value::Int(1),
-            rust_yaml::Value::Bool(false),
-        ]);
+        let seq = Yaml::Array(vec![Yaml::Integer(1), Yaml::Boolean(false)]);
         assert_eq!(
             yaml_as_vec_of_strings(&seq).unwrap(),
             vec!["1".to_string(), "false".to_string()]
         );
 
-        let bad = rust_yaml::Value::Sequence(vec![rust_yaml::Value::Mapping(IndexMap::new())]);
+        let bad = Yaml::Array(vec![Yaml::Hash(Hash::new())]);
         assert!(yaml_as_vec_of_strings(&bad).is_none());
     }
 
     #[test]
     fn yaml_to_config_handles_sources_templates_targets_and_recipes() {
-        let mut root = IndexMap::new();
-        root.insert(
-            yaml_key("common"),
-            rust_yaml::Value::String("common".to_string()),
-        );
+        let mut root = Hash::new();
+        root.insert(yaml_key("common"), Yaml::String("common".to_string()));
 
-        let mut lic_map = IndexMap::new();
-        lic_map.insert(yaml_key("id"), rust_yaml::Value::String("MIT".to_string()));
+        let mut lic_map = Hash::new();
+        lic_map.insert(yaml_key("id"), Yaml::String("MIT".to_string()));
         lic_map.insert(
             yaml_key("path"),
-            rust_yaml::Value::String("LICENSES/MIT.txt".to_string()),
+            Yaml::String("LICENSES/MIT.txt".to_string()),
         );
-        root.insert(yaml_key("license"), rust_yaml::Value::Mapping(lic_map));
+        root.insert(yaml_key("license"), Yaml::Hash(lic_map));
 
-        let mut src_ok = IndexMap::new();
-        src_ok.insert(
-            yaml_key("name"),
-            rust_yaml::Value::String("local".to_string()),
-        );
-        src_ok.insert(
-            yaml_key("path"),
-            rust_yaml::Value::String("/tmp/templates".to_string()),
-        );
-        let src_missing_name = rust_yaml::Value::Mapping(IndexMap::new());
+        let mut src_ok = Hash::new();
+        src_ok.insert(yaml_key("name"), Yaml::String("local".to_string()));
+        src_ok.insert(yaml_key("path"), Yaml::String("/tmp/templates".to_string()));
+        let src_missing_name = Yaml::Hash(Hash::new());
         root.insert(
             yaml_key("sources"),
-            rust_yaml::Value::Sequence(vec![
-                rust_yaml::Value::Mapping(src_ok),
-                rust_yaml::Value::String("not-a-map".to_string()),
+            Yaml::Array(vec![
+                Yaml::Hash(src_ok),
+                Yaml::String("not-a-map".to_string()),
                 src_missing_name,
             ]),
         );
 
-        let mut templates = IndexMap::new();
-        templates.insert(
-            yaml_key("rust"),
-            rust_yaml::Value::String("rust".to_string()),
-        );
-        let mut detailed = IndexMap::new();
-        detailed.insert(
-            yaml_key("source"),
-            rust_yaml::Value::String("local".to_string()),
-        );
-        detailed.insert(
-            yaml_key("path"),
-            rust_yaml::Value::String("common".to_string()),
-        );
-        templates.insert(yaml_key("common"), rust_yaml::Value::Mapping(detailed));
-        templates.insert(yaml_key("bad"), rust_yaml::Value::Mapping(IndexMap::new()));
-        root.insert(yaml_key("templates"), rust_yaml::Value::Mapping(templates));
+        let mut templates = Hash::new();
+        templates.insert(yaml_key("rust"), Yaml::String("rust".to_string()));
+        let mut detailed = Hash::new();
+        detailed.insert(yaml_key("source"), Yaml::String("local".to_string()));
+        detailed.insert(yaml_key("path"), Yaml::String("common".to_string()));
+        templates.insert(yaml_key("common"), Yaml::Hash(detailed));
+        templates.insert(yaml_key("bad"), Yaml::Hash(Hash::new()));
+        root.insert(yaml_key("templates"), Yaml::Hash(templates));
 
-        let mut targets = IndexMap::new();
+        let mut targets = Hash::new();
         targets.insert(
             yaml_key("rust"),
-            rust_yaml::Value::Sequence(vec![
-                rust_yaml::Value::String("common".to_string()),
-                rust_yaml::Value::String("rust".to_string()),
+            Yaml::Array(vec![
+                Yaml::String("common".to_string()),
+                Yaml::String("rust".to_string()),
             ]),
         );
-        targets.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
-        root.insert(yaml_key("targets"), rust_yaml::Value::Mapping(targets));
+        targets.insert(yaml_key("bad"), Yaml::String("no".to_string()));
+        root.insert(yaml_key("targets"), Yaml::Hash(targets));
 
-        let mut recipes = IndexMap::new();
-        let mut recipe_map = IndexMap::new();
+        let mut recipes = Hash::new();
+        let mut recipe_map = Hash::new();
         recipe_map.insert(
             yaml_key("templates"),
-            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("rust".to_string())]),
+            Yaml::Array(vec![Yaml::String("rust".to_string())]),
         );
-        let mut fs_ok = IndexMap::new();
-        fs_ok.insert(
-            yaml_key("root"),
-            rust_yaml::Value::String("/tmp".to_string()),
-        );
+        let mut fs_ok = Hash::new();
+        fs_ok.insert(yaml_key("root"), Yaml::String("/tmp".to_string()));
         fs_ok.insert(
             yaml_key("include"),
-            rust_yaml::Value::Sequence(vec![rust_yaml::Value::String("README.md".to_string())]),
+            Yaml::Array(vec![Yaml::String("README.md".to_string())]),
         );
         recipe_map.insert(
             yaml_key("files"),
-            rust_yaml::Value::Sequence(vec![
-                rust_yaml::Value::Mapping(fs_ok),
-                rust_yaml::Value::String("bad".to_string()),
-            ]),
+            Yaml::Array(vec![Yaml::Hash(fs_ok), Yaml::String("bad".to_string())]),
         );
-        recipes.insert(yaml_key("r1"), rust_yaml::Value::Mapping(recipe_map));
-        recipes.insert(yaml_key("bad"), rust_yaml::Value::String("no".to_string()));
-        root.insert(yaml_key("recipes"), rust_yaml::Value::Mapping(recipes));
+        recipes.insert(yaml_key("r1"), Yaml::Hash(recipe_map));
+        recipes.insert(yaml_key("bad"), Yaml::String("no".to_string()));
+        root.insert(yaml_key("recipes"), Yaml::Hash(recipes));
 
-        let cfg = yaml_to_config(Path::new("x"), &rust_yaml::Value::Mapping(root)).unwrap();
+        let cfg = yaml_to_config(Path::new("x"), &Yaml::Hash(root)).unwrap();
         assert_eq!(cfg.common.as_deref(), Some("common"));
         assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
         assert_eq!(
@@ -854,11 +817,14 @@ templates:
         assert_eq!(cfg.sources.len(), 1);
         assert!(cfg.templates.contains_key("rust"));
         assert!(cfg.templates.contains_key("common"));
+        assert!(!cfg.templates.contains_key("bad"));
         assert_eq!(
             cfg.targets.get("rust").unwrap(),
             &vec!["common".to_string(), "rust".to_string()]
         );
+        assert!(!cfg.targets.contains_key("bad"));
         assert!(cfg.recipes.contains_key("r1"));
+        assert!(!cfg.recipes.contains_key("bad"));
         assert_eq!(cfg.recipes["r1"].files.len(), 1);
     }
 }
