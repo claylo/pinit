@@ -223,15 +223,16 @@ pub fn default_config_paths() -> Vec<PathBuf> {
 
     if let Some(xdg) = env::var_os("XDG_CONFIG_HOME") {
         let xdg = PathBuf::from(xdg);
-        out.push(xdg.join("pinit.toml"));
-        out.push(xdg.join("pinit.yaml"));
-        out.push(xdg.join("pinit.yml"));
+        let root = xdg.join("pinit");
+        out.push(root.join("pinit.toml"));
+        out.push(root.join("pinit.yaml"));
+        out.push(root.join("pinit.yml"));
         return out;
     }
 
     if let Some(home) = env::var_os("HOME") {
         let home = PathBuf::from(home);
-        let config = home.join(".config");
+        let config = home.join(".config").join("pinit");
         out.push(config.join("pinit.toml"));
         out.push(config.join("pinit.yaml"));
         out.push(config.join("pinit.yml"));
@@ -299,7 +300,7 @@ fn parse_yaml(path: &Path, s: &str) -> Result<Config, ConfigError> {
         path: path.to_path_buf(),
         message: e.to_string(),
     })?;
-    let Some(doc) = docs.get(0) else {
+    let Some(doc) = docs.first() else {
         return Err(ConfigError::ParseYaml {
             path: path.to_path_buf(),
             message: "empty YAML document".to_string(),
