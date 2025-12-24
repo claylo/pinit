@@ -32,7 +32,7 @@ Notes:
 
 ## Configuration
 
-`pinit` loads config from `~/.config/pinit.toml` or `~/.config/pinit.yaml` (or `--config <path>`).
+`pinit` loads config from `~/.config/pinit/pinit.toml` or `~/.config/pinit/pinit.yaml` (or `--config <path>`).
 
 TOML example:
 ```toml

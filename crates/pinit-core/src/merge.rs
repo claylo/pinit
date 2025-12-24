@@ -243,12 +243,8 @@ fn merge_yaml(dest_bytes: &[u8], src_bytes: &[u8]) -> Option<Vec<u8>> {
     let mut dest_docs = YamlLoader::load_from_str(dest_str).ok()?;
     let src_docs = YamlLoader::load_from_str(src_str).ok()?;
 
-    let Some(dest_val) = dest_docs.get_mut(0) else {
-        return None;
-    };
-    let Some(src_val) = src_docs.get(0) else {
-        return None;
-    };
+    let dest_val = dest_docs.first_mut()?;
+    let src_val = src_docs.first()?;
 
     merge_yaml_value(dest_val, src_val);
 

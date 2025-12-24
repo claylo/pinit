@@ -59,13 +59,13 @@ Search order (highest priority first):
 
 1. `--config <path>` (explicit override)
 2. If `XDG_CONFIG_HOME` is set:
-   - `XDG_CONFIG_HOME/pinit.toml`
-   - `XDG_CONFIG_HOME/pinit.yaml`
-   - `XDG_CONFIG_HOME/pinit.yml`
+   - `XDG_CONFIG_HOME/pinit/pinit.toml`
+   - `XDG_CONFIG_HOME/pinit/pinit.yaml`
+   - `XDG_CONFIG_HOME/pinit/pinit.yml`
 3. Otherwise (HOME fallback):
-   - `~/.config/pinit.toml`
-   - `~/.config/pinit.yaml`
-   - `~/.config/pinit.yml`
+   - `~/.config/pinit/pinit.toml`
+   - `~/.config/pinit/pinit.yaml`
+   - `~/.config/pinit/pinit.yml`
 
 Notes:
 - If `--config` is used, discovery stops there even if the path does not exist.
