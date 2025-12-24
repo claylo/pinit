@@ -58,7 +58,10 @@ fn run_merge(
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -138,7 +141,10 @@ fn merge_lines_no_new_lines_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -166,7 +172,10 @@ fn merge_env_no_missing_keys_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -210,7 +219,10 @@ fn merge_env_with_comment_makes_merge_unavailable() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -236,7 +248,10 @@ fn merge_binary_file_unavailable_skips() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -289,7 +304,10 @@ fn merge_ruby_call_is_not_treated_as_require_import() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -347,7 +365,10 @@ fn merge_rust_no_additions_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -417,7 +438,10 @@ fn merge_css_no_additions_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -458,7 +482,10 @@ fn merge_markdown_no_additions_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -507,7 +534,10 @@ fn merge_html_no_additions_results_in_skip_after_merge() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();

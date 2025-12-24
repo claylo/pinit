@@ -50,7 +50,10 @@ fn skip_existing_decider_is_used_for_existing_files() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap();
@@ -78,7 +81,10 @@ fn overwrite_dry_run_counts_update_without_writing() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: true },
+        pinit_core::ApplyOptions {
+            dry_run: true,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -105,7 +111,10 @@ fn apply_skips_identical_files() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -124,7 +133,10 @@ fn apply_always_ignores_dot_git_paths() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -144,7 +156,10 @@ fn apply_generated_dry_run_reports_updates_without_writing() {
         &dest,
         "LICENSE",
         b"new\n",
-        pinit_core::ApplyOptions { dry_run: true },
+        pinit_core::ApplyOptions {
+            dry_run: true,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -173,7 +188,10 @@ fn overwrite_preserves_existing_permissions() {
     let _ = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();

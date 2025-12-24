@@ -82,6 +82,14 @@ pub struct TemplateResolver {
     cache_dir: PathBuf,
 }
 
+/// Resolved template entry with its name and local directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedTemplate {
+    pub name: String,
+    pub dir: PathBuf,
+    pub index: usize,
+}
+
 impl TemplateResolver {
     pub fn with_default_cache() -> Result<Self, ResolveError> {
         let base = directories::BaseDirs::new().ok_or(ResolveError::NoHomeDir)?;
@@ -106,6 +114,16 @@ impl TemplateResolver {
         cfg: &Config,
         recipe_or_template: &str,
     ) -> Result<Vec<PathBuf>, ResolveError> {
+        let entries = self.resolve_recipe_templates(cfg, recipe_or_template)?;
+        Ok(entries.into_iter().map(|entry| entry.dir).collect())
+    }
+
+    /// Resolve a recipe name to a list of template directories with metadata.
+    pub fn resolve_recipe_templates(
+        &self,
+        cfg: &Config,
+        recipe_or_template: &str,
+    ) -> Result<Vec<ResolvedTemplate>, ResolveError> {
         let resolved = cfg
             .resolve_recipe(recipe_or_template)
             .ok_or_else(|| ResolveError::UnknownTemplate(recipe_or_template.to_string()))?;
@@ -116,8 +134,9 @@ impl TemplateResolver {
             "resolve recipe"
         );
         let mut out = Vec::new();
-        for name in resolved.templates {
-            out.push(self.resolve_template_dir(cfg, &name)?);
+        for (index, name) in resolved.templates.into_iter().enumerate() {
+            let dir = self.resolve_template_dir(cfg, &name)?;
+            out.push(ResolvedTemplate { name, dir, index });
         }
         Ok(out)
     }

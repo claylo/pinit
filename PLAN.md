@@ -8,7 +8,7 @@
 - Support user configuration in **either** `~/.config/pinit.toml` **or** `~/.config/pinit.yaml` for:
   - Template source(s)
   - Template name → path mapping
-  - A `common` template path/name used as a base layer
+  - A `base_template` value naming the base layer template
   - Target aliases (e.g. `rust` → stack `common + rust`)
 - Provide two crates:
   - `pinit-cli` (the `pinit` command)
@@ -40,7 +40,7 @@
 - A “template” is a directory tree of files.
 - A “stack” is an ordered list of templates applied in sequence (e.g. `common` then `rust`).
 - Source resolution order:
-  1. CLI overrides (`--config`, `--templates`, explicit `--common`)
+  1. CLI overrides (`--config`, `--templates`, explicit `--base-template`)
   2. `~/.config/pinit.{toml,yaml}`
   3. Local fallback: `./templates` next to the running binary (or current repo in dev mode).
 
@@ -57,7 +57,7 @@
 ## Config shape (sketch)
 TOML:
 ```toml
-common = "common"
+base_template = "common"
 
 [[sources]]
 name = "local"
@@ -79,7 +79,7 @@ rust = ["common", "rust"]
 
 YAML equivalent:
 ```yaml
-common: common
+base_template: common
 sources:
   - name: local
     path: /Users/me/src/pinit/templates
@@ -106,9 +106,9 @@ File handling rules (v1):
 ## “AST merge tool” approach (license-clean)
 Implement merges ourselves on top of permissive crates:
 - TOML: `toml_edit` (`DocumentMut`) to preserve formatting as much as feasible while inserting missing keys/tables.
-- YAML: `rust-yaml` (crate name `rust_yaml`) merge for mappings (insert missing keys; recursively merge maps; do not overwrite scalars).
+- YAML: `yaml-rust2` merge for mappings (insert missing keys; recursively merge maps; do not overwrite scalars).
   - Rationale: `serde_yaml` is deprecated.
-  - Note: `rust-yaml` is young; expect some churn. Before adopting, verify its crate license is permissive (MIT/Apache/BSD) and pin a version.
+  - Note: `yaml-rust2` is young; expect some churn. Before adopting, verify its crate license is permissive (MIT/Apache/BSD) and pin a version.
 - Optional later: JSON via `serde_json::Value`.
 
 ## Language-aware merging (source code)
@@ -116,7 +116,7 @@ Merging needs to extend beyond TOML/YAML because templates may include source co
 
 Constraints:
 - This tool is primarily a “bring me up to baseline” installer (template → existing project), not a full 3‑way merge engine.
-- Without a common base, truly correct merges of edited source code are hard; the safe default is to ask the user (overwrite/merge/skip) and show a good diff.
+- Without a base template, truly correct merges of edited source code are hard; the safe default is to ask the user (overwrite/merge/skip) and show a good diff.
 
 Plan:
 - Define a merge-driver registry in `pinit-core` keyed by filename/extension.
@@ -160,7 +160,7 @@ Diff output:
 ### Phase 2: Config + recipe resolution
 - Implement config discovery/parse (`~/.config/pinit.toml|yaml`, `--config`) in `pinit-core`.
   - TOML parsing via `toml`.
-  - YAML parsing via `rust-yaml` (convert YAML AST → internal config).
+- YAML parsing via `yaml-rust2` (convert YAML AST → internal config).
 - Implement “recipe” resolution:
   - Targets that expand to stacks (`common + rust`)
   - Inline file-set recipes (explicit + globbed entries from various roots)
@@ -187,7 +187,7 @@ Diff output:
   - Behavior can be set via flags and overridden per-file interactively unless `--yes`.
 - Implement merge dispatcher by path/extension (merge-driver registry in `pinit-core`):
   - `.toml` via `toml_edit`
-  - `.yml`/`.yaml` via `rust-yaml` (`rust_yaml`)
+- `.yml`/`.yaml` via `yaml-rust2`
   - `.env` key merge
   - `.envrc` safe line merge
   - fallback line-append merge
@@ -198,6 +198,35 @@ Diff output:
 - Implement unified diff preview + interactive prompt per changed file.
 - Flags: `--dry-run`, `--yes`.
 - Tests: golden tests for each merge strategy (source/dest → merged).
+
+### Phase 5.5: Template precedence overrides (per-file, last-wins)
+- Goal: allow later templates in a stack to explicitly override earlier templates for specific paths
+  (e.g. keep all of `common`, but force `rust/.gitignore` to replace `common/.gitignore`).
+- Config shape:
+  - Add an optional override rule list that can live on targets and recipes without breaking existing config:
+    - Preserve the current `targets.<name> = [..]` shape.
+    - Add a detailed target/recipe form, e.g. `targets.<name> = { templates = [...], overrides = [...] }`.
+    - Each override entry includes a path or glob and an action:
+      - `path` / `pattern` (string, glob-style)
+      - `action` = `overwrite` | `merge` | `skip` (default: `overwrite` for "last-wins")
+  - Keep a global override list optional for users who want defaults across all stacks.
+- CLI shape:
+  - Add a flag like `--override <glob>` (repeatable) and `--override-action <overwrite|merge|skip>`
+    to force precedence without editing config.
+  - Defaults: `--override` implies `overwrite` unless `--override-action` is provided.
+- Core behavior:
+  - Extend template-application context to know "current template name" and its stack index.
+  - Before prompting/merging, check override rules for the current template and relative path.
+  - If a rule matches, choose the requested action and **do not prompt** (even in interactive mode).
+  - If action is `merge` but merge is unavailable, fall back to `skip` (same as today).
+  - Ensure rules only apply to files that are part of the incoming template, not unrelated dest files.
+- Tests:
+  - Config parsing for new target/recipe shapes in TOML and YAML.
+  - Stack apply: later template with override replaces earlier file; non-matching files retain default behavior.
+  - CLI override flag works without config changes.
+  - Interactive prompt is bypassed when an override rule applies.
+- Docs:
+  - Update configuration guide with override rules and CLI examples.
 
 ### Phase 6: `new` command + git init
 - Implement `pinit new <template> <dir>` using the same engine.
@@ -232,4 +261,3 @@ Diff output:
 - Optional format support (JSON), ignore globs, and `--include/--exclude`.
 - Expand language-aware merge drivers for common source files (opt-in or best-effort), with strict fallbacks to diff + user choice.
 - Add `--print-config` and `--explain <file>` debug tooling.
-

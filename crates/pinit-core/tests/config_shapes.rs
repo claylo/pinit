@@ -78,3 +78,95 @@ fn load_config_missing_path_returns_io_error() {
     let err = pinit_core::config::load_config(Some(&path)).unwrap_err();
     assert!(matches!(err, pinit_core::config::ConfigError::Io { .. }));
 }
+
+#[test]
+fn toml_overrides_are_parsed_for_targets_and_recipes() {
+    let cfg: pinit_core::config::Config = toml::from_str(
+        r#"
+[[overrides]]
+pattern = ".editorconfig"
+action = "skip"
+
+[templates]
+common = "/tmp/common"
+rust = "/tmp/rust"
+
+[targets.rust]
+templates = ["common", "rust"]
+
+[[targets.rust.overrides]]
+pattern = ".gitignore"
+action = "overwrite"
+
+[recipes.full]
+templates = ["rust"]
+
+[[recipes.full.overrides]]
+pattern = "Cargo.toml"
+action = "merge"
+"#,
+    )
+    .unwrap();
+
+    let resolved = cfg.resolve_recipe("rust").unwrap();
+    assert_eq!(resolved.overrides.len(), 2);
+    assert_eq!(resolved.overrides[0].pattern, ".editorconfig");
+    assert_eq!(
+        resolved.overrides[0].action,
+        pinit_core::config::OverrideAction::Skip
+    );
+    assert_eq!(resolved.overrides[1].pattern, ".gitignore");
+    assert_eq!(
+        resolved.overrides[1].action,
+        pinit_core::config::OverrideAction::Overwrite
+    );
+
+    let recipe = cfg.resolve_recipe("full").unwrap();
+    assert_eq!(recipe.overrides.len(), 2);
+    assert_eq!(recipe.overrides[0].pattern, ".editorconfig");
+    assert_eq!(recipe.overrides[1].pattern, "Cargo.toml");
+}
+
+#[test]
+fn yaml_overrides_are_parsed() {
+    let root = std::env::temp_dir().join(format!("pinit-config-overrides-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+
+    let path = root.join("pinit.yaml");
+    fs::write(
+        &path,
+        r#"
+overrides:
+  - path: ".editorconfig"
+    action: skip
+templates:
+  common: common
+  rust: rust
+targets:
+  rust:
+    templates: [common, rust]
+    overrides:
+      - pattern: ".gitignore"
+        action: overwrite
+recipes:
+  full:
+    templates: [rust]
+    overrides:
+      - path: Cargo.toml
+        action: merge
+"#,
+    )
+    .unwrap();
+
+    let (_, cfg) = pinit_core::config::load_config(Some(&path)).unwrap();
+    let resolved = cfg.resolve_recipe("rust").unwrap();
+    assert_eq!(resolved.overrides.len(), 2);
+    assert_eq!(resolved.overrides[0].pattern, ".editorconfig");
+    assert_eq!(resolved.overrides[1].pattern, ".gitignore");
+    let recipe = cfg.resolve_recipe("full").unwrap();
+    assert_eq!(recipe.overrides.len(), 2);
+    assert_eq!(recipe.overrides[1].pattern, "Cargo.toml");
+
+    let _ = fs::remove_dir_all(&root);
+}

@@ -39,7 +39,10 @@ fn apply_template_dir_errors_when_template_missing() {
     let err = pinit_core::apply_template_dir(
         &template,
         &dest,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap_err();
@@ -61,7 +64,10 @@ fn apply_template_dir_errors_when_template_not_dir() {
     let err = pinit_core::apply_template_dir(
         &template,
         &dest,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap_err();
@@ -89,7 +95,10 @@ fn apply_template_dir_errors_on_symlink_entry() {
     let err = pinit_core::apply_template_dir(
         &template,
         &dest,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap_err();
@@ -111,7 +120,10 @@ fn apply_template_dir_errors_when_dest_is_not_dir() {
     let err = pinit_core::apply_template_dir(
         &template,
         &dest,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap_err();
@@ -135,7 +147,10 @@ fn apply_template_dir_errors_when_template_is_symlink() {
     let err = pinit_core::apply_template_dir(
         &template,
         &dest,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap_err();

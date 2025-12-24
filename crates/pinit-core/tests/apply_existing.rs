@@ -55,7 +55,10 @@ fn existing_file_overwrite_replaces_contents() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();
@@ -85,7 +88,10 @@ fn existing_env_merge_adds_missing_keys_only() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut decider,
     )
     .unwrap();

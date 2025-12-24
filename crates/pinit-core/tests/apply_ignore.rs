@@ -47,7 +47,10 @@ fn always_ignores_ds_store() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap();
@@ -92,7 +95,10 @@ fn honors_destination_gitignore() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap();

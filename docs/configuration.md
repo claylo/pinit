@@ -6,6 +6,7 @@ It is intentionally exhaustive. :smile:
 ---
 
 **Contents**
+
 <!-- toc -->
 
 * [1. Config discovery and precedence](#1-config-discovery-and-precedence)
@@ -21,6 +22,7 @@ It is intentionally exhaustive. :smile:
   * [6.2 Detailed form (with source)](#62-detailed-form-with-source)
   * [6.3 Path-only templates (no config)](#63-path-only-templates-no-config)
 * [7. Targets (template stacks)](#7-targets-template-stacks)
+  * [7.1 Override rules](#71-override-rules)
 * [8. Recipes (templates + inline file sets)](#8-recipes-templates--inline-file-sets)
 * [9. License injection](#9-license-injection)
   * [9.1 Simple form (string)](#91-simple-form-string)
@@ -101,8 +103,9 @@ Top-level keys and their meanings:
 | `license`  | string or object                     | Optional SPDX-based license injection |
 | `sources`  | array of source objects              | Local or git-backed template roots |
 | `templates`| map of template definitions          | Named template directories |
-| `targets`  | map of template name arrays          | Named stacks of templates |
+| `targets`  | map of template arrays or objects    | Named stacks of templates (optionally with overrides) |
 | `recipes`  | map of recipe objects                | Named stacks + (optionally) inline file sets |
+| `overrides`| array of override rules              | Default override rules applied to all stacks |
 
 Each section is detailed below.
 
@@ -294,6 +297,17 @@ Targets are named stacks of template names:
 rust = ["common", "rust", "github-actions"]
 ```
 
+You can also use a detailed form to add overrides:
+
+```toml
+[targets.rust]
+templates = ["common", "rust"]
+
+[[targets.rust.overrides]]
+pattern = ".gitignore"
+action = "overwrite"
+```
+
 Calling:
 
 ```
@@ -305,6 +319,63 @@ applies templates in order: `common`, then `rust`, then `github-actions`.
 Notes:
 - Targets do not automatically include `base_template`. You must list it explicitly.
 - If any template name in a target is missing, the run fails.
+
+### 7.1 Override rules
+
+Override rules let later templates in a stack win for specific paths (without prompting).
+
+Rules:
+- Each rule has a `pattern` (or `path`) and an `action` (`overwrite`, `merge`, `skip`).
+- `action` defaults to `overwrite` when omitted.
+- Rules are checked in order and the **last match wins**.
+- `merge` falls back to `skip` when no merge driver is available.
+- Matching rules apply without prompting, even in interactive runs.
+
+You can define overrides at three levels:
+
+```toml
+[[overrides]]
+pattern = ".editorconfig"
+action = "skip"
+
+[targets.rust]
+templates = ["common", "rust"]
+
+[[targets.rust.overrides]]
+pattern = ".gitignore"
+action = "overwrite"
+
+[recipes.full]
+templates = ["rust"]
+
+[[recipes.full.overrides]]
+pattern = "Cargo.toml"
+action = "merge"
+```
+
+YAML equivalent:
+
+```yaml
+overrides:
+  - path: ".editorconfig"
+    action: skip
+targets:
+  rust:
+    templates: [common, rust]
+    overrides:
+      - pattern: ".gitignore"
+        action: overwrite
+recipes:
+  full:
+    templates: [rust]
+    overrides:
+      - path: Cargo.toml
+        action: merge
+```
+
+Pattern notes:
+- Patterns are matched against the **relative path** within the template.
+- Use `**/` if you want to match nested paths (e.g., `**/.gitignore`).
 
 ---
 
@@ -321,6 +392,8 @@ root = "/Users/me/snippets"
 include = ["README.md", ".github/workflows/*.yml"]
 dest_prefix = "meta"
 ```
+
+Recipes also support `overrides` with the same shape as targets and global overrides.
 
 Current behavior (important):
 - The config format supports `files`, and they are parsed and resolved.
@@ -388,6 +461,7 @@ When files already exist in the destination:
   - `--overwrite`
   - `--merge`
   - `--skip`
+  - `--override <glob>` (repeatable) with optional `--override-action <overwrite|merge|skip>`
 - `--yes` makes the run non-interactive and applies the selected behavior to all files.
 
 Merge availability:

@@ -544,6 +544,114 @@ fn apply_yes_overwrite_overwrites_existing() {
 }
 
 #[test]
+fn apply_stack_override_overwrites_later_template() {
+    let root = make_temp_root();
+    let common_dir = root.join("common");
+    let rust_dir = root.join("rust");
+    let dest_dir = root.join("dest");
+    fs::create_dir_all(&common_dir).unwrap();
+    fs::create_dir_all(&rust_dir).unwrap();
+    fs::create_dir_all(&dest_dir).unwrap();
+    fs::write(common_dir.join("hello.txt"), "from-common\n").unwrap();
+    fs::write(rust_dir.join("hello.txt"), "from-rust\n").unwrap();
+
+    let cfg = root.join("pinit.toml");
+    fs::write(
+        &cfg,
+        format!(
+            r#"
+[templates]
+common = "{common}"
+rust = "{rust}"
+
+[targets.rust]
+templates = ["common", "rust"]
+
+[[targets.rust.overrides]]
+pattern = "hello.txt"
+action = "overwrite"
+"#,
+            common = common_dir.display(),
+            rust = rust_dir.display()
+        ),
+    )
+    .unwrap();
+
+    let out = pinit()
+        .args([
+            "--config",
+            cfg.to_string_lossy().as_ref(),
+            "apply",
+            "rust",
+            dest_dir.to_string_lossy().as_ref(),
+            "--yes",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-rust\n"
+    );
+}
+
+#[test]
+fn cli_override_flags_take_precedence() {
+    let root = make_temp_root();
+    let common_dir = root.join("common");
+    let rust_dir = root.join("rust");
+    let dest_dir = root.join("dest");
+    fs::create_dir_all(&common_dir).unwrap();
+    fs::create_dir_all(&rust_dir).unwrap();
+    fs::create_dir_all(&dest_dir).unwrap();
+    fs::write(common_dir.join("hello.txt"), "from-common\n").unwrap();
+    fs::write(rust_dir.join("hello.txt"), "from-rust\n").unwrap();
+
+    let cfg = root.join("pinit.toml");
+    fs::write(
+        &cfg,
+        format!(
+            r#"
+[templates]
+common = "{common}"
+rust = "{rust}"
+
+[targets.rust]
+templates = ["common", "rust"]
+
+[[targets.rust.overrides]]
+pattern = "hello.txt"
+action = "skip"
+"#,
+            common = common_dir.display(),
+            rust = rust_dir.display()
+        ),
+    )
+    .unwrap();
+
+    let out = pinit()
+        .args([
+            "--config",
+            cfg.to_string_lossy().as_ref(),
+            "apply",
+            "rust",
+            dest_dir.to_string_lossy().as_ref(),
+            "--yes",
+            "--override",
+            "hello.txt",
+            "--override-action",
+            "overwrite",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        fs::read_to_string(dest_dir.join("hello.txt")).unwrap(),
+        "from-rust\n"
+    );
+}
+
+#[test]
 fn new_dry_run_does_not_create_dir_and_mentions_git_init() {
     let root = make_temp_root();
     let template_dir = root.join("template");

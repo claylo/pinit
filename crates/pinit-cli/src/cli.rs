@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(name = "pinit")]
@@ -34,6 +34,13 @@ pub enum Command {
     Version,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum OverrideActionArg {
+    Overwrite,
+    Merge,
+    Skip,
+}
+
 #[derive(Args, Debug)]
 pub struct ApplyArgs {
     /// Template/recipe name from config, or a path to a template directory
@@ -61,6 +68,14 @@ pub struct ApplyArgs {
     /// When a file exists, skip it
     #[arg(long, conflicts_with_all = ["overwrite", "merge"])]
     pub skip: bool,
+
+    /// Override template precedence for matching paths (repeatable)
+    #[arg(long = "override", action = ArgAction::Append)]
+    pub overrides: Vec<String>,
+
+    /// Override action for --override patterns (default: overwrite)
+    #[arg(long = "override-action", value_enum)]
+    pub override_action: Option<OverrideActionArg>,
 }
 
 #[derive(Args, Debug)]
@@ -87,6 +102,14 @@ pub struct NewArgs {
     /// When a file exists, skip it
     #[arg(long, conflicts_with_all = ["overwrite", "merge"])]
     pub skip: bool,
+
+    /// Override template precedence for matching paths (repeatable)
+    #[arg(long = "override", action = ArgAction::Append)]
+    pub overrides: Vec<String>,
+
+    /// Override action for --override patterns (default: overwrite)
+    #[arg(long = "override-action", value_enum)]
+    pub override_action: Option<OverrideActionArg>,
 
     /// Initialize a git repository (default: on)
     #[arg(long = "git", action = ArgAction::SetTrue, conflicts_with = "no_git")]

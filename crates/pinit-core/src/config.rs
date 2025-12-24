@@ -30,7 +30,10 @@ pub struct Config {
     pub templates: BTreeMap<String, TemplateDef>,
 
     #[serde(default)]
-    pub targets: BTreeMap<String, Vec<String>>,
+    pub targets: BTreeMap<String, TargetDef>,
+
+    #[serde(default)]
+    pub overrides: Vec<OverrideRule>,
 
     #[serde(default)]
     pub recipes: BTreeMap<String, RecipeDef>,
@@ -161,6 +164,60 @@ impl TemplateDef {
     }
 }
 
+/// Action to take when an override rule matches.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OverrideAction {
+    #[default]
+    Overwrite,
+    Merge,
+    Skip,
+}
+
+/// Override rule for a specific path or glob.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct OverrideRule {
+    #[serde(alias = "path", alias = "pattern")]
+    pub pattern: String,
+
+    #[serde(default)]
+    pub action: OverrideAction,
+}
+
+/// Target definition that can be a simple template list or a detailed object.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum TargetDef {
+    Templates(Vec<String>),
+    Detailed(TargetDetailed),
+}
+
+impl TargetDef {
+    pub fn templates(&self) -> &[String] {
+        match self {
+            TargetDef::Templates(items) => items.as_slice(),
+            TargetDef::Detailed(def) => def.templates.as_slice(),
+        }
+    }
+
+    pub fn overrides(&self) -> &[OverrideRule] {
+        match self {
+            TargetDef::Templates(_) => &[],
+            TargetDef::Detailed(def) => def.overrides.as_slice(),
+        }
+    }
+}
+
+/// Detailed target definition with template list and overrides.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct TargetDetailed {
+    #[serde(default)]
+    pub templates: Vec<String>,
+
+    #[serde(default)]
+    pub overrides: Vec<OverrideRule>,
+}
+
 /// Recipe definition made of template names and/or file sets.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub struct RecipeDef {
@@ -169,6 +226,9 @@ pub struct RecipeDef {
 
     #[serde(default)]
     pub files: Vec<FileSetDef>,
+
+    #[serde(default)]
+    pub overrides: Vec<OverrideRule>,
 }
 
 /// File set definition for inline recipes.
@@ -188,6 +248,7 @@ pub struct ResolvedRecipe {
     pub name: String,
     pub templates: Vec<String>,
     pub files: Vec<FileSetDef>,
+    pub overrides: Vec<OverrideRule>,
 }
 
 /// Errors encountered while loading configuration.
@@ -401,11 +462,29 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
             let Some(name) = yaml_as_string(k) else {
                 continue;
             };
-            let Some(items) = yaml_as_vec_of_strings(v) else {
+            if let Some(items) = yaml_as_vec_of_strings(v) {
+                cfg.targets.insert(name, TargetDef::Templates(items));
+                continue;
+            }
+            let Some(detail_map) = yaml_as_mapping(v) else {
                 continue;
             };
-            cfg.targets.insert(name, items);
+            let templates = yaml_get_vec_of_strings(detail_map, "templates").unwrap_or_default();
+            let overrides = yaml_get(detail_map, "overrides")
+                .and_then(yaml_to_override_rules)
+                .unwrap_or_default();
+            cfg.targets.insert(
+                name,
+                TargetDef::Detailed(TargetDetailed {
+                    templates,
+                    overrides,
+                }),
+            );
         }
+    }
+
+    if let Some(overrides) = yaml_get(map, "overrides").and_then(yaml_to_override_rules) {
+        cfg.overrides = overrides;
     }
 
     if let Some(recipes_root) = yaml_get(map, "recipes").and_then(yaml_as_mapping) {
@@ -418,6 +497,9 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
             };
 
             let templates = yaml_get_vec_of_strings(recipe_map, "templates").unwrap_or_default();
+            let overrides = yaml_get(recipe_map, "overrides")
+                .and_then(yaml_to_override_rules)
+                .unwrap_or_default();
             let mut files = Vec::new();
             if let Some(files_seq) = yaml_get_seq(recipe_map, "files") {
                 for fs_item in files_seq {
@@ -437,7 +519,14 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
                 }
             }
 
-            cfg.recipes.insert(name, RecipeDef { templates, files });
+            cfg.recipes.insert(
+                name,
+                RecipeDef {
+                    templates,
+                    files,
+                    overrides,
+                },
+            );
         }
     }
 
@@ -500,6 +589,35 @@ fn yaml_as_vec_of_strings(y: &Yaml) -> Option<Vec<String>> {
     }
 }
 
+fn yaml_to_override_rules(y: &Yaml) -> Option<Vec<OverrideRule>> {
+    let Yaml::Array(seq) = y else {
+        return None;
+    };
+    let mut out = Vec::new();
+    for item in seq {
+        let Some(map) = yaml_as_mapping(item) else {
+            continue;
+        };
+        let pattern = yaml_get_string(map, "path").or_else(|| yaml_get_string(map, "pattern"));
+        let Some(pattern) = pattern else {
+            continue;
+        };
+        let action = match yaml_get_string(map, "action")
+            .as_deref()
+            .map(|s| s.to_ascii_lowercase())
+            .as_deref()
+        {
+            None => OverrideAction::Overwrite,
+            Some("overwrite") => OverrideAction::Overwrite,
+            Some("merge") => OverrideAction::Merge,
+            Some("skip") => OverrideAction::Skip,
+            Some(_) => continue,
+        };
+        out.push(OverrideRule { pattern, action });
+    }
+    Some(out)
+}
+
 fn yaml_to_license(y: &Yaml) -> Option<LicenseDef> {
     if let Some(s) = yaml_as_string(y) {
         return Some(LicenseDef::Spdx(s));
@@ -542,18 +660,24 @@ impl Config {
     /// Resolve a recipe/target/template name into concrete templates and file sets.
     pub fn resolve_recipe(&self, name: &str) -> Option<ResolvedRecipe> {
         if let Some(def) = self.recipes.get(name) {
+            let mut overrides = self.overrides.clone();
+            overrides.extend(def.overrides.clone());
             return Some(ResolvedRecipe {
                 name: name.to_string(),
                 templates: def.templates.clone(),
                 files: def.files.clone(),
+                overrides,
             });
         }
 
         if let Some(stack) = self.targets.get(name) {
+            let mut overrides = self.overrides.clone();
+            overrides.extend(stack.overrides().iter().cloned());
             return Some(ResolvedRecipe {
                 name: name.to_string(),
-                templates: stack.clone(),
+                templates: stack.templates().to_vec(),
                 files: Vec::new(),
+                overrides,
             });
         }
 
@@ -565,10 +689,12 @@ impl Config {
                 templates.push(base_template.to_string());
             }
             templates.push(name.to_string());
+            let overrides = self.overrides.clone();
             return Some(ResolvedRecipe {
                 name: name.to_string(),
                 templates,
                 files: Vec::new(),
+                overrides,
             });
         }
 
@@ -611,6 +737,7 @@ rust = ["common", "rust"]
             resolved.templates,
             vec!["common".to_string(), "rust".to_string()]
         );
+        assert!(resolved.overrides.is_empty());
     }
 
     #[test]
@@ -636,6 +763,7 @@ targets:
             vec!["common".to_string(), "rust".to_string()]
         );
         assert_eq!(cfg.license.as_ref().unwrap().spdx(), "MIT");
+        assert!(resolved.overrides.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }
@@ -848,8 +976,8 @@ templates:
         assert!(cfg.templates.contains_key("common"));
         assert!(!cfg.templates.contains_key("bad"));
         assert_eq!(
-            cfg.targets.get("rust").unwrap(),
-            &vec!["common".to_string(), "rust".to_string()]
+            cfg.targets.get("rust").unwrap().templates(),
+            &["common".to_string(), "rust".to_string()]
         );
         assert!(!cfg.targets.contains_key("bad"));
         assert!(cfg.recipes.contains_key("r1"));

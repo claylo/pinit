@@ -37,7 +37,10 @@ fn apply_copies_missing_files() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: false },
+        pinit_core::ApplyOptions {
+            dry_run: false,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap();
@@ -63,7 +66,10 @@ fn dry_run_does_not_write() {
     let report = pinit_core::apply_template_dir(
         &template_dir,
         &dest_dir,
-        pinit_core::ApplyOptions { dry_run: true },
+        pinit_core::ApplyOptions {
+            dry_run: true,
+            ..Default::default()
+        },
         &mut pinit_core::SkipExisting,
     )
     .unwrap();

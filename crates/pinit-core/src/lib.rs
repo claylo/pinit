@@ -40,6 +40,10 @@ impl ExistingFileAction {
 
 /// Context describing an existing destination file and its candidate replacements.
 pub struct ExistingFileDecisionContext<'a> {
+    /// Template name if the caller provided one.
+    pub template_name: Option<&'a str>,
+    /// Template index in the stack if the caller provided one.
+    pub template_index: Option<usize>,
     /// Relative path within the destination.
     pub rel_path: &'a Path,
     /// Destination path on disk.
@@ -68,10 +72,14 @@ impl ExistingFileDecider for SkipExisting {
 }
 
 /// Options that control template application.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ApplyOptions {
     /// When true, compute changes but do not write to disk.
     pub dry_run: bool,
+    /// Template name for stack-aware decisions.
+    pub template_name: Option<String>,
+    /// Template index for stack-aware decisions.
+    pub template_index: Option<usize>,
 }
 
 /// Summary of work performed during template application.
@@ -154,7 +162,7 @@ impl std::error::Error for ApplyError {
 /// use pinit_core::{apply_template_dir, ApplyOptions, SkipExisting};
 ///
 /// let mut decider = SkipExisting::default();
-/// let options = ApplyOptions { dry_run: true };
+/// let options = ApplyOptions { dry_run: true, ..Default::default() };
 /// let _report = apply_template_dir("templates/rust", ".", options, &mut decider).unwrap();
 /// ```
 #[instrument(skip(options, decider), fields(template_dir = %template_dir.as_ref().display(), dest_dir = %dest_dir.as_ref().display(), dry_run = options.dry_run))]
@@ -204,7 +212,7 @@ pub fn apply_template_dir(
         template_dir,
         template_dir,
         dest_dir,
-        options,
+        &options,
         &git_ignore,
         decider,
         &mut report,
@@ -222,7 +230,7 @@ pub fn apply_template_dir(
 /// use pinit_core::{apply_generated_file, ApplyOptions, SkipExisting};
 ///
 /// let mut decider = SkipExisting::default();
-/// let options = ApplyOptions { dry_run: true };
+/// let options = ApplyOptions { dry_run: true, ..Default::default() };
 /// let _report = apply_generated_file(".", "LICENSE", b"MIT\n", options, &mut decider).unwrap();
 /// ```
 #[instrument(skip(options, decider, contents), fields(dest_dir = %dest_dir.as_ref().display(), rel_path = %rel_path.as_ref().display(), dry_run = options.dry_run))]
@@ -290,6 +298,8 @@ pub fn apply_generated_file(
         }
 
         let action = decider.decide(ExistingFileDecisionContext {
+            template_name: options.template_name.as_deref(),
+            template_index: options.template_index,
             rel_path,
             dest_path: &dest_path,
             src_bytes: contents,
@@ -372,7 +382,7 @@ fn apply_dir_recursive(
     root: &Path,
     current: &Path,
     dest_root: &Path,
-    options: ApplyOptions,
+    options: &ApplyOptions,
     git_ignore: &Option<GitIgnore>,
     decider: &mut dyn ExistingFileDecider,
     report: &mut ApplyReport,
@@ -468,6 +478,8 @@ fn apply_dir_recursive(
 
             let merge_bytes = merge::merge_file(rel, &dest_bytes, &src_bytes);
             let action = decider.decide(ExistingFileDecisionContext {
+                template_name: options.template_name.as_deref(),
+                template_index: options.template_index,
                 rel_path: rel,
                 dest_path: &dest_path,
                 src_bytes: &src_bytes,

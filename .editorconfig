@@ -1,10 +1,280 @@
+# .editorconfig — mixed-tooling, style-guide-leaning defaults
+#
+# Scope note:
+# EditorConfig only controls whitespace-ish stuff (indent, EOL, charset, trimming,
+# final newline, and an advisory max_line_length). Everything else is for
+# formatters/linters (prettier, black, rustfmt, gofmt, shfmt, php-cs-fixer, etc).
+
 root = true
 
+# ----------------------------
+# Global defaults (sane + not-too-opinionated)
+# ----------------------------
 [*]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[*.md]
+# Default to 2 spaces unless overridden per language
+indent_style = space
+indent_size = 2
+tab_width = 2
+
+# Keep global wide; narrow per language where there’s a strong norm
+max_line_length = 120
+
+# ----------------------------
+# Markdown / docs (commonmark conventions)
+# ----------------------------
+[*.{md,mdx,markdown}]
+indent_style = space
+indent_size = 2
+max_line_length = off
+trim_trailing_whitespace = false   # trailing spaces can be meaningful in Markdown
+
+[*.{txt,rst,adoc}]
+max_line_length = off
 trim_trailing_whitespace = false
+
+# ----------------------------
+# JSON / YAML / TOML
+# ----------------------------
+[*.{json,jsonc}]
+indent_style = space
+indent_size = 2
+max_line_length = off              # formatter-owned
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+max_line_length = off              # formatter-owned
+
+[*.toml]
+indent_style = space
+indent_size = 2
+max_line_length = off              # tool-owned (cargo, etc.)
+
+# ----------------------------
+# JavaScript / TypeScript (Prettier defaults: 2 spaces, 80-ish)
+# ----------------------------
+[*.{js,mjs,cjs,jsx}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+
+[*.{ts,mts,cts,tsx}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+
+# ----------------------------
+# Python (Black dominates modern style: 4 spaces, 88)
+# ----------------------------
+[*.py]
+indent_style = space
+indent_size = 4
+max_line_length = 88
+
+# ----------------------------
+# Rust (rustfmt defaults: 4 spaces, 100)
+# ----------------------------
+[*.rs]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+# ----------------------------
+# Go (gofmt: tabs)
+# ----------------------------
+[*.go]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+max_line_length = off
+
+[go.mod]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+
+[go.sum]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+
+# ----------------------------
+# PHP (PSR-12: 4 spaces; soft 120 char limit)
+# ----------------------------
+[*.{php,phtml,phpt}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+# ----------------------------
+# Java / Kotlin / C# (common IDE defaults: 4 spaces)
+# ----------------------------
+[*.{java,kt,kts,cs}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+# ----------------------------
+# C / C++ / ObjC (common: 4 spaces)
+# ----------------------------
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx,m,mm}]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+# ----------------------------
+# Ruby (Rubocop default line length is commonly 120; indent 2)
+# ----------------------------
+[*.{rb,rake,gemspec}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# ----------------------------
+# Lua
+# ----------------------------
+[*.lua]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# ----------------------------
+# Shell scripts (de facto: 2 spaces; let shfmt decide wrapping)
+# ----------------------------
+[*.{sh,bash,zsh}]
+indent_style = space
+indent_size = 2
+max_line_length = off
+
+[*.fish]
+indent_style = space
+indent_size = 2
+max_line_length = off
+
+# Windows batch files: CRLF plays nicer in cmd.exe tooling
+[*.{bat,cmd}]
+end_of_line = crlf
+indent_style = space
+indent_size = 2
+charset = utf-8
+max_line_length = off
+
+# PowerShell: many repos still prefer CRLF + BOM
+[*.ps1]
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+charset = utf-8-bom
+max_line_length = 120
+
+# ----------------------------
+# HTML / CSS / SCSS / XML (Prettier-ish)
+# ----------------------------
+[*.{html,htm,css,scss,sass,less}]
+indent_style = space
+indent_size = 2
+max_line_length = 80
+
+[*.{xml,xsd,xslt,svg}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# ----------------------------
+# SQL (teams vary; 2 spaces is common)
+# ----------------------------
+[*.sql]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# ----------------------------
+# Terraform / HCL (terraform fmt: 2 spaces)
+# ----------------------------
+[*.{tf,tfvars,hcl}]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+# ----------------------------
+# Docker / Compose
+# ----------------------------
+[Dockerfile]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+[*.dockerfile]
+indent_style = space
+indent_size = 2
+max_line_length = 120
+
+[*.{docker-compose.yml,docker-compose.yaml,compose.yml,compose.yaml}]
+indent_style = space
+indent_size = 2
+max_line_length = off
+
+# ----------------------------
+# Makefiles MUST use tabs for recipe lines
+# ----------------------------
+[Makefile]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+max_line_length = off
+
+[makefile]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+max_line_length = off
+
+[*.mk]
+indent_style = tab
+tab_width = 8
+indent_size = 8
+max_line_length = off
+
+# ----------------------------
+# Git / patches / diffs — do not “helpfully” trim
+# ----------------------------
+[*.{diff,patch}]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Commit messages (when editors surface them as files)
+[COMMIT_EDITMSG]
+max_line_length = 72
+trim_trailing_whitespace = false
+
+# ----------------------------
+# Lockfiles / generated artifacts — preserve tool output
+# ----------------------------
+[*.lock]
+trim_trailing_whitespace = false
+max_line_length = off
+
+[*.{log,out}]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# ----------------------------
+# Binary-ish files — don’t apply whitespace rules
+# ----------------------------
+[*.{png,jpg,jpeg,gif,webp,ico,pdf,zip,gz,bz2,xz,7z,tar,jar,war,exe,dll,so,dylib,woff,woff2,ttf,otf,eot}]
+trim_trailing_whitespace = false
+insert_final_newline = false
+max_line_length = off
+
+# ----------------------------
+# Vendor/build dirs (some implementations honor **, some don’t)
+# ----------------------------
+[**/{node_modules,dist,build,target,vendor,coverage}/**]
+trim_trailing_whitespace = false
+insert_final_newline = false
+max_line_length = off
