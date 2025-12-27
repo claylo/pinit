@@ -1,0 +1,33 @@
+[package]
+name = "pinit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Project initialization by applying template baselines."
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "pinit"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5.26", features = ["derive"] }
+pinit-core = { path = "../pinit-core" }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
+similar = "2.7.0"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.tar.xz"
+pkg-fmt = "txz"
+bin-dir = "{ name }-v{ version }-{ target }/{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-v{ version }-{ target }.zip"
+pkg-fmt = "zip"
+bin-dir = "{ bin }{ binary-ext }"

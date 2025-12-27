@@ -5,11 +5,32 @@ It is intentionally exhaustive. :smile:
 
 ---
 
+## 0. What pinit is (and what it is not)
+
+`pinit` applies template baselines to a directory. It is not a code generator, a scaffolder, or a
+mind reader. Think “copy with opinions and merge where it’s safe,” not “summon a framework from
+thin air.” (If you *do* summon a framework from thin air, please document it.)
+
+### 0.1 Sources, templates, targets, and recipes
+
+Four nouns, four jobs:
+
+- **Sources**: where templates live (local paths or git repos).
+- **Templates**: a named directory inside a source.
+- **Targets**: an ordered stack of templates (apply `common` then `rust`, etc.).
+- **Recipes**: like targets, but can also include inline file sets.
+
+You can have **many** of each: multiple sources, dozens of templates, several targets, and recipes
+for “just this project.” They’re composable. They are not magical. (That’s for future versions.)
+
+---
+
 **Contents**
 
 <!-- toc -->
 
 * [1. Config discovery and precedence](#1-config-discovery-and-precedence)
+  * [1.1 Multiple configs in real life](#11-multiple-configs-in-real-life)
 * [2. Supported formats (TOML and YAML)](#2-supported-formats-toml-and-yaml)
 * [3. Top-level configuration keys](#3-top-level-configuration-keys)
 * [4. Template resolution rules (names, targets, recipes)](#4-template-resolution-rules-names-targets-recipes)
@@ -47,7 +68,7 @@ It is intentionally exhaustive. :smile:
   * [License output errors](#license-output-errors)
   * [Merge "skips" when you expected merges](#merge-skips-when-you-expected-merges)
   * [Git ignore behavior surprises](#git-ignore-behavior-surprises)
-* [13. YAML equivalents](#13-yaml-equivalents)
+* [13. Full config example (TOML + YAML)](#13-full-config-example-toml--yaml)
 * [14. Quick checklist](#14-quick-checklist)
 
 <!-- tocstop -->
@@ -57,6 +78,7 @@ It is intentionally exhaustive. :smile:
 ## 1. Config discovery and precedence
 
 `pinit` loads exactly one config file. It never merges multiple config files.
+If you were hoping for a config smoothie, you’ll have to blend it yourself.
 
 Search order (highest priority first):
 
@@ -77,11 +99,25 @@ Notes:
 - `pinit apply <name>` / `pinit new <name>` require a config (since the name must resolve).
 - `pinit apply <path>` bypasses config resolution entirely (see "Apply by name vs path").
 
+### 1.1 Multiple configs in real life
+
+`pinit` doesn’t merge configs, but you can absolutely have **multiple** configs and pick one per
+context. Recommendations that work well in practice:
+
+- **Global defaults**: Keep a personal config in `~/.config/pinit/pinit.toml` for everyday work.
+- **Team or repo config**: Put a shared config in your repo and pass it with `--config`.
+- **Different work modes**: Maintain a couple of named configs and swap them via `--config`.
+
+You can put config files **anywhere**: a repo, your home folder, a USB drive, or a directory you
+swore you’d clean up last year. If you want the default discovery to find them, keep them under
+`~/.config/pinit/`.
+
 ---
 
 ## 2. Supported formats (TOML and YAML)
 
-`pinit` supports TOML and YAML.
+`pinit` supports TOML and YAML. YAML will do its best to be helpful, which is occasionally
+code for “surprising.”
 
 YAML specifics:
 - The root must be a mapping (object). Sequences at the root are rejected.
@@ -183,17 +219,32 @@ Resolution rules:
 
 ### 5.1 Local sources
 
+TOML:
 ```toml
 [[sources]]
 name = "local"
 path = "/Users/me/templates"
 ```
 
+YAML:
+```yaml
+sources:
+  - name: local
+    path: /Users/me/templates
+```
+
 Template:
 
+TOML:
 ```toml
 [templates]
 rust = { source = "local", path = "rust" }
+```
+
+YAML:
+```yaml
+templates:
+  rust: { source: local, path: rust }
 ```
 
 Resolved directory:
@@ -204,6 +255,7 @@ Resolved directory:
 
 ### 5.2 Git sources
 
+TOML:
 ```toml
 [[sources]]
 name = "remote"
@@ -215,9 +267,22 @@ subdir = "templates"     # optional
 
 Template:
 
+TOML:
 ```toml
 [templates]
 node = { source = "remote", path = "node" }
+```
+
+YAML:
+```yaml
+sources:
+  - name: remote
+    repo: acme/pinit-templates
+    git_protocol: ssh   # optional; default is ssh
+    ref: v2.3.1          # branch/tag/commit; defaults to HEAD
+    subdir: templates    # optional
+templates:
+  node: { source: remote, path: node }
 ```
 
 Resolution:
@@ -253,9 +318,16 @@ Templates map a name to a directory. They can be defined in one of two forms.
 
 ### 6.1 Simple path form
 
+TOML:
 ```toml
 [templates]
 rust = "/Users/me/templates/rust"
+```
+
+YAML:
+```yaml
+templates:
+  rust: /Users/me/templates/rust
 ```
 
 Rules:
@@ -264,10 +336,18 @@ Rules:
 
 ### 6.2 Detailed form (with source)
 
+TOML:
 ```toml
 [templates]
 common = { source = "local", path = "common" }
 rust = { source = "local", path = "rust" }
+```
+
+YAML:
+```yaml
+templates:
+  common: { source: local, path: common }
+  rust: { source: local, path: rust }
 ```
 
 Rules:
@@ -293,13 +373,21 @@ In this mode:
 
 Targets are named stacks of template names:
 
+TOML:
 ```toml
 [targets]
 rust = ["common", "rust", "github-actions"]
 ```
 
+YAML:
+```yaml
+targets:
+  rust: [common, rust, github-actions]
+```
+
 You can also use a detailed form to add overrides:
 
+TOML:
 ```toml
 [targets.rust]
 templates = ["common", "rust"]
@@ -309,6 +397,16 @@ pattern = ".gitignore"
 action = "overwrite"
 ```
 
+YAML:
+```yaml
+targets:
+  rust:
+    templates: [common, rust]
+    overrides:
+      - pattern: ".gitignore"
+        action: overwrite
+```
+
 Calling:
 
 ```
@@ -316,6 +414,8 @@ pinit apply rust
 ```
 
 applies templates in order: `common`, then `rust`, then `github-actions`.
+
+Order matters. This is not a buffet.
 
 Notes:
 - Targets do not automatically include `base_template`. You must list it explicitly.
@@ -334,6 +434,7 @@ Rules:
 
 You can define overrides at three levels:
 
+TOML:
 ```toml
 [[overrides]]
 pattern = ".editorconfig"
@@ -354,8 +455,7 @@ pattern = "Cargo.toml"
 action = "merge"
 ```
 
-YAML equivalent:
-
+YAML:
 ```yaml
 overrides:
   - path: ".editorconfig"
@@ -384,6 +484,7 @@ Pattern notes:
 
 Recipes can include templates and (optionally) inline file sets.
 
+TOML:
 ```toml
 [recipes.rust-lite]
 templates = ["rust"]
@@ -392,6 +493,19 @@ templates = ["rust"]
 root = "/Users/me/snippets"
 include = ["README.md", ".github/workflows/*.yml"]
 dest_prefix = "meta"
+```
+
+YAML:
+```yaml
+recipes:
+  rust-lite:
+    templates: [rust]
+    files:
+      - root: /Users/me/snippets
+        include:
+          - README.md
+          - .github/workflows/*.yml
+        dest_prefix: meta
 ```
 
 Recipes also support `overrides` with the same shape as targets and global overrides.
@@ -408,21 +522,39 @@ If you rely on file sets, confirm support in your `pinit` version before using t
 ## 9. License injection
 
 `pinit` can render SPDX licenses into your project at apply time.
+Yes, you still have to decide which license you want.
 
 ### 9.1 Simple form (string)
 
+TOML:
 ```toml
 license = "MIT"
 ```
 
+YAML:
+```yaml
+license: MIT
+```
+
 ### 9.2 Detailed form
 
+TOML:
 ```toml
 [license]
 spdx = "Apache-2.0"
 output = "LICENSES/Apache-2.0.txt"  # must be relative
 name = "Jane Developer"
 args = { "project" = "Acme Tools" }
+```
+
+YAML:
+```yaml
+license:
+  spdx: Apache-2.0
+  output: LICENSES/Apache-2.0.txt  # must be relative
+  name: Jane Developer
+  args:
+    project: Acme Tools
 ```
 
 Rules:
@@ -494,12 +626,22 @@ Below are examples tailored for a developer working with Rust, JavaScript, PHP, 
 
 Use a single local folder of templates:
 
+TOML:
 ```toml
 [templates]
 rust = "/Users/me/templates/rust"
 node = "/Users/me/templates/node"
 php = "/Users/me/templates/php"
 python = "/Users/me/templates/python"
+```
+
+YAML:
+```yaml
+templates:
+  rust: /Users/me/templates/rust
+  node: /Users/me/templates/node
+  php: /Users/me/templates/php
+  python: /Users/me/templates/python
 ```
 
 Apply:
@@ -510,6 +652,7 @@ pinit apply rust
 
 ### 11.2 Local templates in multiple directories
 
+TOML:
 ```toml
 [[sources]]
 name = "lang"
@@ -529,10 +672,27 @@ python = { source = "lang", path = "python" }
 base_template = "common"
 ```
 
+YAML:
+```yaml
+base_template: common
+sources:
+  - name: lang
+    path: /Users/me/templates/lang
+  - name: ops
+    path: /Users/me/templates/ops
+templates:
+  common: { source: ops, path: common }
+  rust: { source: lang, path: rust }
+  node: { source: lang, path: node }
+  php: { source: lang, path: php }
+  python: { source: lang, path: python }
+```
+
 `pinit apply rust` applies `common` + `rust`.
 
 ### 11.3 Mixed local + GitHub templates
 
+TOML:
 ```toml
 base_template = "common"
 
@@ -554,14 +714,42 @@ php = { source = "remote", path = "php" }
 python = { source = "remote", path = "python" }
 ```
 
+YAML:
+```yaml
+base_template: common
+sources:
+  - name: local
+    path: /Users/me/templates
+  - name: remote
+    repo: https://github.com/acme/pinit-templates.git
+    ref: v1.8.0
+    subdir: templates
+templates:
+  common: { source: local, path: common }
+  rust: { source: local, path: rust }
+  node: { source: remote, path: node }
+  php: { source: remote, path: php }
+  python: { source: remote, path: python }
+```
+
 ### 11.4 Stack templates per language (targets)
 
+TOML:
 ```toml
 [targets]
 rust = ["common", "rust", "github-actions", "editorconfig"]
 node = ["common", "node", "eslint", "prettier"]
 php = ["common", "php", "phpstan"]
 python = ["common", "python", "ruff"]
+```
+
+YAML:
+```yaml
+targets:
+  rust: [common, rust, github-actions, editorconfig]
+  node: [common, node, eslint, prettier]
+  php: [common, php, phpstan]
+  python: [common, python, ruff]
 ```
 
 Then:
@@ -573,9 +761,17 @@ pinit apply node
 
 ### 11.5 Full-stack recipe (composed of templates)
 
+TOML:
 ```toml
 [recipes.fullstack]
 templates = ["common", "node", "php", "docker"]
+```
+
+YAML:
+```yaml
+recipes:
+  fullstack:
+    templates: [common, node, php, docker]
 ```
 
 Run:
@@ -590,7 +786,7 @@ If your team keeps a shared config in a repo:
 
 ```
 repo/
-  pinit.toml
+  pinit.toml   # or pinit.yaml
   templates/
     rust/
     node/
@@ -609,7 +805,7 @@ This works even if the config is not in `~/.config/pinit`.
 You can store a project-specific config next to a project and use it only when needed:
 
 ```
-~/projects/acme-api/pinit.toml
+~/projects/acme-api/pinit.toml   # or pinit.yaml
 ```
 
 Apply with:
@@ -620,6 +816,7 @@ pinit --config ~/projects/acme-api/pinit.toml apply rust
 
 ### 11.8 Pinning templates to a specific commit
 
+TOML:
 ```toml
 [[sources]]
 name = "pinned"
@@ -628,6 +825,16 @@ ref = "5f2c9bf2b8e4c8b7b2f2f1b5fdd7f7b3f0c9a0d1"
 
 [templates]
 rust = { source = "pinned", path = "rust" }
+```
+
+YAML:
+```yaml
+sources:
+  - name: pinned
+    repo: https://github.com/acme/pinit-templates.git
+    ref: 5f2c9bf2b8e4c8b7b2f2f1b5fdd7f7b3f0c9a0d1
+templates:
+  rust: { source: pinned, path: rust }
 ```
 
 ---
@@ -654,10 +861,38 @@ rust = { source = "pinned", path = "rust" }
 
 ---
 
-## 13. YAML equivalents
+## 13. Full config example (TOML + YAML)
 
-All examples above can be expressed in YAML. Example:
+TOML:
+```toml
+base_template = "common"
 
+[[sources]]
+name = "local"
+path = "/Users/me/templates"
+
+[[sources]]
+name = "remote"
+repo = "https://github.com/acme/pinit-templates.git"
+ref = "v1.8.0"
+subdir = "templates"
+
+[templates]
+common = { source = "local", path = "common" }
+rust = { source = "local", path = "rust" }
+node = { source = "remote", path = "node" }
+
+[targets]
+rust = ["common", "rust"]
+node = ["common", "node"]
+
+[license]
+spdx = "MIT"
+name = "Jane Developer"
+output = "LICENSE"
+```
+
+YAML:
 ```yaml
 base_template: common
 sources:
@@ -676,7 +911,6 @@ targets:
   node: [common, node]
 license:
   spdx: MIT
-  year: "2025"
   name: Jane Developer
   output: LICENSE
 ```

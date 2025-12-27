@@ -1,7 +1,64 @@
 # pinit
 > just-over-engineered-enough **p**roject **init**ialization
 
-`pinit` applies project template baselines to existing (or non-existent) directories.
+`pinit` applies project template baselines to existing (or non-existent) directories. It’s a
+copy-and-merge tool with opinions about safety, not a scaffolding wizard with a crystal ball.
+
+---
+
+**Contents**
+
+<!-- toc -->
+
+* [Features](#features)
+* [Installation](#installation)
+* [Quick start](#quick-start)
+* [Usage](#usage)
+* [Template model (sources → templates → targets → recipes)](#template-model-sources-%E2%86%92-templates-%E2%86%92-targets-%E2%86%92-recipes)
+* [Configuration](#configuration)
+* [Common workflows](#common-workflows)
+* [Documentation](#documentation)
+* [Project status](#project-status)
+* [Development](#development)
+* [Contributing](#contributing)
+* [License](#license)
+
+<!-- tocstop -->
+
+---
+
+## Features
+
+- Stack multiple templates in order (targets/recipes).
+- Merge conservatively for common file types; fall back to skip when unsafe.
+- Override per-path precedence for “this file always wins.”
+- Dry-run and non-interactive modes for automation.
+- Respects destination `.gitignore` rules.
+- Optional SPDX license injection.
+
+## Installation
+
+Prebuilt binaries:
+
+```sh
+brew install claylo/brew/pinit
+```
+
+```sh
+cargo binstall pinit
+```
+
+From a local checkout:
+
+```sh
+cargo install --path crates/pinit
+```
+
+Or run without installing:
+
+```sh
+cargo run -p pinit -- --help
+```
 
 ## Quick start
 
@@ -30,6 +87,15 @@ Notes:
 - The selected action handles existing files: overwrite, additive merge, or skip.
 - `--override` forces precedence for matching paths (last-wins).
 - Destination gitignore rules are honored to avoid copying ignored files.
+
+## Template model (sources → templates → targets → recipes)
+
+- **Sources** point at local directories or git repos.
+- **Templates** are named directories inside sources.
+- **Targets** are ordered stacks of templates.
+- **Recipes** are like targets, plus optional inline file sets.
+
+If you want the long version, see `docs/CONFIG.md`.
 
 ## Configuration
 
@@ -70,7 +136,34 @@ recipes:
     templates: [rust]
 ```
 
-## Validation
+## Common workflows
+
+```sh
+# dry-run a stack into the current directory
+pinit apply rust --dry-run
+
+# apply a template directory directly (bypasses config)
+pinit apply /path/to/template
+
+# force a later template to overwrite a specific file
+pinit apply rust --override .gitignore --override-action overwrite
+```
+
+## Documentation
+
+- Configuration guide: `docs/CONFIG.md`
+- Comparisons: `docs/COMPARISON.md`
+- Changelog: `CHANGELOG.md`
+- Plan/Roadmap: `PLAN.md`
+
+## Project status
+
+`pinit` is pre-1.0. Expect a fast-moving feature set and a few sharp edges that are being sanded
+in real time.
+
+## Development
+
+Validation:
 
 ```sh
 just check
@@ -78,7 +171,7 @@ just test
 just cov
 ```
 
-## Xtask
+Xtask:
 
 ```sh
 # build a manpage into target/man
@@ -88,35 +181,16 @@ cargo xtask man
 cargo xtask install
 ```
 
-## Prior Art
+## Contributing
 
-It's not like I'm the first to say, "hey, starting a new project should suck less!" So why `pinit` and not just one of the other approaches? Well...
+Open a PR with a clear intent and keep changes focused. If you touch behavior, add tests in the
+same change. (Future you will say thanks.)
 
-### What about Yeoman?
+## License
 
-I've always wanted to love [Yeoman](https://yeoman.io), and it's an excellent fit for many people. It's very JavaScripty, though, and I've had too many projects start with a failing `yo` generator. Not a great way to get started. Plus, many templates are close to what I might want but differ just enough to make the post-generation clean-up process annoying and not repeatable.
+Licensed under either of:
 
-### Okay, `git init` templates!
+- Apache License, Version 2.0 (`LICENSE-APACHE`)
+- MIT license (`LICENSE-MIT`)
 
-"`git init` supports template directories," you say. "Why not use a series of those instead of creating a whole new thing?"
-
-Read the [documentation on template directories](https://git-scm.com/docs/git-init#_template_directory), and you'll see the problem with `git init`. (Emphasis mine.)
-
-> Files and directories in the template directory whose names **do not start with a dot** will be copied
-
-How many *useful* template repositories would *not* contain file names beginning with a dot? :thinking:
-
-### GitHub Repository Templates?
-
-GitHub repository templates were [announced on June 6, 2019](https://github.blog/2019-06-06-generate-new-repositories-with-repository-templates/), and are [documented here](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
-
-But:
-
-* What if my new project isn't on GitHub?
-* What if I don't know yet if I want a hosted remote?
-
-### What if :scream: I'm not using git?
-
-IKR? So crazy. :roll_eyes:
-
-No, really: A whole bunch of folks use [Subversion](https://subversion.apache.org/). There's a thing called [Piper](https://cacm.acm.org/magazines/2016/7/204032-why-google-stores-billions-of-lines-of-code-in-a-single-repository/fulltext) that houses a gazillion lines of code. There's Perforce, Mercurial, and ... look at [this list](https://en.wikipedia.org/wiki/Comparison_of_version-control_software).
+at your option.

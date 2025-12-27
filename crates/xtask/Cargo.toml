@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 clap = { version = "4.5.26", features = ["derive"] }
 clap_mangen = "0.2.31"
-pinit-cli = { path = "../pinit-cli" }
+pinit = { path = "../pinit" }
