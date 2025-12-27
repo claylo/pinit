@@ -1,31 +1,9 @@
 # pinit
+
 > just-over-engineered-enough **p**roject **init**ialization
 
 `pinit` applies project template baselines to existing (or non-existent) directories. It’s a
 copy-and-merge tool with opinions about safety, not a scaffolding wizard with a crystal ball.
-
----
-
-**Contents**
-
-<!-- toc -->
-
-* [Features](#features)
-* [Installation](#installation)
-* [Quick start](#quick-start)
-* [Usage](#usage)
-* [Template model (sources → templates → targets → recipes)](#template-model-sources-%E2%86%92-templates-%E2%86%92-targets-%E2%86%92-recipes)
-* [Configuration](#configuration)
-* [Common workflows](#common-workflows)
-* [Documentation](#documentation)
-* [Project status](#project-status)
-* [Development](#development)
-* [Contributing](#contributing)
-* [License](#license)
-
-<!-- tocstop -->
-
----
 
 ## Features
 
@@ -82,6 +60,7 @@ pinit list
 ```
 
 Notes:
+
 - `--dry-run` computes changes without writing.
 - `--yes` makes the run non-interactive (default action is merge when available).
 - The selected action handles existing files: overwrite, additive merge, or skip.
@@ -102,6 +81,7 @@ If you want the long version, see `docs/CONFIG.md`.
 `pinit` loads config from `~/.config/pinit/pinit.toml` or `~/.config/pinit/pinit.yaml` (or `--config <path>`).
 
 TOML example:
+
 ```toml
 base_template = "common"
 
@@ -121,6 +101,7 @@ templates = ["rust"]
 ```
 
 YAML example:
+
 ```yaml
 base_template: common
 sources:

@@ -1,6 +1,7 @@
 # pinit Rust CLI plan
 
 ## Goals
+
 - Replace the repo-level `Justfile`/`bin/install-template` flow with a Rust CLI (`pinit`) that installs templates into an existing directory.
 - Support template sources from:
   - A local templates directory (e.g. `./templates/` or any user-provided path).
@@ -16,12 +17,14 @@
 - Use license-clean (MIT/Apache/BSD) dependencies. No GPL code or libraries.
 
 ## Non-goals (for v1)
+
 - Full 3-way merge / conflict resolution across divergent histories.
 - Semantic merges for every file type under the sun.
 - Template parameterization / scaffolding (vars, prompts, rendering).
 - Remote module registries.
 
 ## UX / Commands (target)
+
 - `pinit apply <template> [dest]`
   - Applies `<template>` into `dest` (default `.`).
   - For existing files, default to prompting with choices: overwrite / additive merge / skip.
@@ -37,6 +40,7 @@
   - `-v/--verbose`, `--quiet`
 
 ## Template model
+
 - A “template” is a directory tree of files.
 - A “stack” is an ordered list of templates applied in sequence (e.g. `common` then `rust`).
 - Source resolution order:
@@ -45,6 +49,7 @@
   3. Local fallback: `./templates` next to the running binary (or current repo in dev mode).
 
 ## Recipe model (config-defined)
+
 - A “recipe” is a configured stack or a pure config-defined file set (for “flavors” within a language).
 - Recipes may be composed entirely of file listings drawn from one or more roots:
   - Explicit file list entries
@@ -55,7 +60,9 @@
   - “Inline file sets” from arbitrary paths
 
 ## Config shape (sketch)
+
 TOML:
+
 ```toml
 base_template = "common"
 
@@ -78,6 +85,7 @@ rust = ["common", "rust"]
 ```
 
 YAML equivalent:
+
 ```yaml
 base_template: common
 sources:
@@ -91,9 +99,11 @@ targets:
 ```
 
 ## Additive merge policy
+
 Default intent is safe-by-default, with explicit user control per file when there’s an existing destination.
 
 File handling rules (v1):
+
 - If dest path does not exist: copy file (preserve permissions where possible).
 - If dest exists and is identical: no-op.
 - If dest exists and differs:
@@ -104,7 +114,9 @@ File handling rules (v1):
   - Otherwise: line-based append of missing exact lines.
 
 ## “AST merge tool” approach (license-clean)
+
 Implement merges ourselves on top of permissive crates:
+
 - TOML: `toml_edit` (`DocumentMut`) to preserve formatting as much as feasible while inserting missing keys/tables.
 - YAML: `yaml-rust2` merge for mappings (insert missing keys; recursively merge maps; do not overwrite scalars).
   - Rationale: `serde_yaml` is deprecated.
@@ -112,32 +124,39 @@ Implement merges ourselves on top of permissive crates:
 - Optional later: JSON via `serde_json::Value`.
 
 ## Language-aware merging (source code)
+
 Merging needs to extend beyond TOML/YAML because templates may include source code.
 
 Constraints:
+
 - This tool is primarily a “bring me up to baseline” installer (template → existing project), not a full 3‑way merge engine.
 - Without a base template, truly correct merges of edited source code are hard; the safe default is to ask the user (overwrite/merge/skip) and show a good diff.
 
 Plan:
+
 - Define a merge-driver registry in `pinit-core` keyed by filename/extension.
 - Start with conservative, deterministic drivers (TOML/YAML/env/envrc/line-append).
 - Start adding language-aware drivers early (Phase 5) using permissive AST tooling (Tree-sitter) to do “insert missing top-level declarations” merges where feasible, and otherwise fall back to diff + user choice.
 
 Diff output:
+
 - Use a permissive diff crate (e.g. `similar` or `diffy`) to print unified diffs for `--dry-run` and interactive prompts.
 
 ## Git template sources
+
 - Clone/fetch via invoking the system `git` (avoid libgit2 linkage/packaging surprises).
 - Cache location: `~/.cache/pinit/` (or platform-appropriate via `directories` crate).
 - Resolve by `(repo URL, ref)` → checkout directory, then template root is `${checkout}/${subdir}`.
 
 ## Security constraints
+
 - Refuse to follow symlinks that escape the template root (and optionally refuse writing through symlinks in dest).
 - Normalize and validate paths to prevent `../` traversal from template files.
 - Honor ignore rules in the target directory (e.g. `.gitignore`, global git excludes) so we don’t copy/diff ignored files like `.DS_Store`.
 - Never print secret values (only filenames/paths); keep logging conservative.
 
 ## OSS license injection
+
 - Support a config stanza that selects an SPDX license ID and renders a license file into the destination.
 - Use the permissively-licensed `license` crate (repo `https://github.com/evenorog/license`) to render license text and pass template args supported by SPDX data.
   - Examples:
@@ -150,6 +169,7 @@ Diff output:
 ## Phases of work
 
 ### Phase 1: Workspace + crate split
+
 - Create a Cargo workspace with:
   - `crates/pinit-core` (library)
   - `crates/pinit` (binary crate, published as `pinit`)
@@ -158,6 +178,7 @@ Diff output:
 - Add a minimal end-to-end smoke test in `pinit` (invoke core against temp dirs).
 
 ### Phase 2: Config + recipe resolution
+
 - Implement config discovery/parse (`~/.config/pinit.toml|yaml`, `--config`) in `pinit-core`.
   - TOML parsing via `toml`.
 - YAML parsing via `yaml-rust2` (convert YAML AST → internal config).
@@ -167,12 +188,14 @@ Diff output:
 - Tests: resolve recipes from config; good errors for missing names/paths.
 
 ### Phase 3: Template source resolution
+
 - Implement local directory source (`--templates <path>` and config source with `path`).
 - Implement git repo source with cache (`repo`, `ref`, `subdir`).
 - Implement template stack resolution for recipes that reference templates.
 - Tests: git cache path handling, missing refs, missing template directories.
 
 ### Phase 4: File walker + ignore-aware copy engine
+
 - Walk template tree deterministically (stable ordering).
 - Apply ignore rules for the *destination* (gitignore + global excludes) to avoid copying/diffing ignored paths.
 - Copy missing files (preserve permissions where possible) unless ignored.
@@ -180,6 +203,7 @@ Diff output:
 - Tests: install into temp dir; verify files and modes.
 
 ### Phase 5: Existing-file behaviors + additive merge strategies (v1)
+
 - For existing differing files, implement behaviors:
   - `overwrite`
   - `merge` (additive)
@@ -200,6 +224,7 @@ Diff output:
 - Tests: golden tests for each merge strategy (source/dest → merged).
 
 ### Phase 5.5: Template precedence overrides (per-file, last-wins)
+
 - Goal: allow later templates in a stack to explicitly override earlier templates for specific paths
   (e.g. keep all of `common`, but force `rust/.gitignore` to replace `common/.gitignore`).
 - Config shape:
@@ -220,17 +245,20 @@ Diff output:
   - If a rule matches, choose the requested action and **do not prompt** (even in interactive mode).
 
 ### Phase 6: `new` command + git init
+
 - Implement `pinit new <template> <dir>` using the same engine.
 - Optional flags: `--no-git`, `--git` (default on), `--branch main`.
 - Tests: creates directory; respects `--dry-run` (no mkdir/no git).
 
 ### Phase 7: License injection
+
 - Implement license rendering in `pinit-core`:
   - Config selects SPDX ID + template args (year, name, etc.)
   - Output to `LICENSE` (and/or additional configured paths)
 - Tests: ensure rendered text includes injected fields for licenses that support them.
 
 ### Phase 8: Documentation
+
 - Update `README.md` to document CLI + config examples.
 - Add a “how to validate” checklist (or CI for the CLI itself).
 - Add comprehensive inline documentation and examples in the source code.
@@ -238,6 +266,7 @@ Diff output:
 - Add a `cargo xtask` that installs the build target cli in `~/.bin` for testing outside of the development environment.
 
 ### Phase 9: Release automation (release-plz)
+
 - Set up release automation for *this repo* (not just the generated templates):
   - Add `release-plz.toml` configured for a workspace with `pinit` + `pinit-core`.
   - Add `.github/workflows/ci.yml` and `.github/workflows/release-plz.yml` modeled after `templates/rust`:
@@ -247,6 +276,7 @@ Diff output:
   - Ensure `Cargo.toml` metadata is publish-ready (license, repository, readme, categories, keywords) and that `CHANGELOG.md` exists at the workspace root.
 
 ### Phase 10: Configurable hook commands (global + recipe)
+
 - Goal: allow users to run commands at specific lifecycle phases, with explicit opt-in for
   init-only vs update runs.
 - Supported phases:
@@ -288,6 +318,7 @@ Diff output:
   - Document hook phases, configuration options, and examples for both global and recipe hooks.
 
 ### Phase 20: Hardening + nice-to-haves
+
 - Symlink policy toggles (`--follow-symlinks` default off).
 - Better TOML table ordering / comment preservation where feasible.
 - Optional format support (JSON), ignore globs, and `--include/--exclude`.
