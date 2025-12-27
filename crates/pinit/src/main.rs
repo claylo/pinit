@@ -5,7 +5,7 @@ use std::process::Command as ProcessCommand;
 
 use clap::{CommandFactory, Parser};
 use pinit::{ApplyArgs, Cli, Command, NewArgs, OverrideActionArg};
-use pinit_core::config::{OverrideAction, OverrideRule};
+use pinit_core::config::{HookDef, HookRunOn, HookSet, LicenseDef, OverrideAction, OverrideRule};
 use pinit_core::resolve::ResolvedTemplate;
 use pinit_core::{ExistingFileAction, ExistingFileDecider, ExistingFileDecisionContext};
 use similar::TextDiff;
@@ -89,8 +89,7 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
     let mut report = apply_template_stack(&resolved, &dest_dir, args.dry_run, &mut decider)?;
 
     report = maybe_apply_license(
-        config_path,
-        &args.template,
+        resolved.license.as_ref(),
         &dest_dir,
         pinit_core::ApplyOptions {
             dry_run: args.dry_run,
@@ -98,6 +97,23 @@ fn cmd_apply(config_path: Option<&std::path::Path>, args: ApplyArgs) -> Result<(
         },
         &mut decider,
         report,
+    )?;
+
+    run_hooks(
+        "after_recipe",
+        &resolved.recipe_hooks.after_recipe,
+        &dest_dir,
+        RunMode::Update,
+        args.dry_run,
+        resolved.recipe_name.as_deref(),
+    )?;
+    run_hooks(
+        "after_all",
+        &resolved.hooks.after_all,
+        &dest_dir,
+        RunMode::Update,
+        args.dry_run,
+        resolved.recipe_name.as_deref(),
     )?;
 
     print_apply_summary(args.dry_run, report);
@@ -126,11 +142,18 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         let resolved = resolve_template_stack(config_path, &args.template)?;
         let overrides = combined_overrides(&resolved, &args.overrides, args.override_action);
         let mut decider = CliDecider::new(default_action, true, overrides);
+        run_hooks(
+            "after_dir_create",
+            &resolved.hooks.after_dir_create,
+            &args.dir,
+            RunMode::Init,
+            true,
+            resolved.recipe_name.as_deref(),
+        )?;
         let mut report = apply_template_stack(&resolved, &args.dir, true, &mut decider)?;
 
         report = maybe_apply_license(
-            config_path,
-            &args.template,
+            resolved.license.as_ref(),
             &args.dir,
             pinit_core::ApplyOptions {
                 dry_run: true,
@@ -138,6 +161,22 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
             },
             &mut decider,
             report,
+        )?;
+        run_hooks(
+            "after_recipe",
+            &resolved.recipe_hooks.after_recipe,
+            &args.dir,
+            RunMode::Init,
+            true,
+            resolved.recipe_name.as_deref(),
+        )?;
+        run_hooks(
+            "after_all",
+            &resolved.hooks.after_all,
+            &args.dir,
+            RunMode::Init,
+            true,
+            resolved.recipe_name.as_deref(),
         )?;
 
         eprintln!("dry-run: would create directory {}", args.dir.display());
@@ -171,6 +210,17 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         std::fs::create_dir_all(&args.dir).map_err(|e| format!("{}: {e}", args.dir.display()))?;
     }
 
+    let resolved = resolve_template_stack(config_path, &args.template)?;
+
+    run_hooks(
+        "after_dir_create",
+        &resolved.hooks.after_dir_create,
+        &args.dir,
+        RunMode::Init,
+        false,
+        resolved.recipe_name.as_deref(),
+    )?;
+
     if !args.no_git {
         git_init(&args.dir, &args.branch)?;
     }
@@ -183,7 +233,6 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         ExistingFileAction::Merge
     };
 
-    let resolved = resolve_template_stack(config_path, &args.template)?;
     let overrides = combined_overrides(&resolved, &args.overrides, args.override_action);
     let mut decider = CliDecider::new(
         default_action,
@@ -193,8 +242,7 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
     let mut report = apply_template_stack(&resolved, &args.dir, false, &mut decider)?;
 
     report = maybe_apply_license(
-        config_path,
-        &args.template,
+        resolved.license.as_ref(),
         &args.dir,
         pinit_core::ApplyOptions {
             dry_run: false,
@@ -202,6 +250,23 @@ fn cmd_new(config_path: Option<&std::path::Path>, args: NewArgs) -> Result<(), S
         },
         &mut decider,
         report,
+    )?;
+
+    run_hooks(
+        "after_recipe",
+        &resolved.recipe_hooks.after_recipe,
+        &args.dir,
+        RunMode::Init,
+        false,
+        resolved.recipe_name.as_deref(),
+    )?;
+    run_hooks(
+        "after_all",
+        &resolved.hooks.after_all,
+        &args.dir,
+        RunMode::Init,
+        false,
+        resolved.recipe_name.as_deref(),
     )?;
 
     print_apply_summary(false, report);
@@ -239,6 +304,10 @@ fn apply_template_stack(
 struct TemplateResolution {
     templates: Vec<ResolvedTemplate>,
     overrides: Vec<OverrideRule>,
+    hooks: HookSet,
+    recipe_hooks: HookSet,
+    recipe_name: Option<String>,
+    license: Option<LicenseDef>,
 }
 
 fn resolve_template_stack(
@@ -259,6 +328,10 @@ fn resolve_template_stack(
                 index: 0,
             }],
             overrides: Vec::new(),
+            hooks: HookSet::default(),
+            recipe_hooks: HookSet::default(),
+            recipe_name: None,
+            license: None,
         });
     }
 
@@ -284,6 +357,11 @@ fn resolve_template_stack(
     Ok(TemplateResolution {
         templates,
         overrides: resolved.overrides.clone(),
+        hooks: cfg.hooks.clone(),
+        recipe_hooks: resolved.hooks.clone(),
+        recipe_name: matches!(resolved.kind, pinit_core::config::ResolvedKind::Recipe)
+            .then(|| resolved.name.clone()),
+        license: cfg.license.clone(),
     })
 }
 
@@ -327,24 +405,125 @@ fn print_apply_summary(dry_run: bool, report: pinit_core::ApplyReport) {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum RunMode {
+    Init,
+    Update,
+}
+
+fn run_hooks(
+    label: &str,
+    hooks: &[HookDef],
+    dest_dir: &std::path::Path,
+    mode: RunMode,
+    dry_run: bool,
+    recipe_name: Option<&str>,
+) -> Result<(), String> {
+    for hook in hooks {
+        if !hook_should_run(hook, mode) {
+            continue;
+        }
+        if dry_run {
+            eprintln!(
+                "dry-run: would run hook {label}: {}",
+                format_command(&hook.command)
+            );
+            continue;
+        }
+
+        let mut cmd = ProcessCommand::new(
+            hook.command
+                .first()
+                .ok_or_else(|| format!("hook {label} command must not be empty"))?,
+        );
+        if hook.command.len() > 1 {
+            cmd.args(&hook.command[1..]);
+        }
+
+        let cwd = match hook.cwd.as_ref() {
+            Some(path) if path.is_absolute() => path.clone(),
+            Some(path) => dest_dir.join(path),
+            None => dest_dir.to_path_buf(),
+        };
+        cmd.current_dir(&cwd);
+
+        cmd.env("PINIT_PHASE", label);
+        cmd.env("PINIT_DEST", dest_dir);
+        if let Some(name) = recipe_name {
+            cmd.env("PINIT_RECIPE", name);
+        }
+        for (key, value) in &hook.env {
+            cmd.env(key, value);
+        }
+
+        tracing::info!(
+            hook = %label,
+            command = %format_command(&hook.command),
+            cwd = %cwd.display(),
+            "run hook"
+        );
+
+        let output = cmd.output().map_err(|e| {
+            format!(
+                "failed to run hook {label} ({}): {e}",
+                format_command(&hook.command)
+            )
+        })?;
+        if output.status.success() {
+            continue;
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let message = format!(
+            "hook {label} failed ({}): {}",
+            output.status.code().unwrap_or(1),
+            stderr.trim()
+        );
+        if hook.allow_failure {
+            eprintln!("warning: {message}");
+        } else {
+            return Err(message);
+        }
+    }
+    Ok(())
+}
+
+fn hook_should_run(hook: &HookDef, mode: RunMode) -> bool {
+    hook.run_on.iter().any(|entry| {
+        matches!(
+            (entry, mode),
+            (HookRunOn::Init, RunMode::Init) | (HookRunOn::Update, RunMode::Update)
+        )
+    })
+}
+
+fn format_command(command: &[String]) -> String {
+    if command.is_empty() {
+        return "<empty>".to_string();
+    }
+    let mut out = String::new();
+    for (idx, part) in command.iter().enumerate() {
+        if idx > 0 {
+            out.push(' ');
+        }
+        if part.contains(' ') {
+            out.push('"');
+            out.push_str(part);
+            out.push('"');
+        } else {
+            out.push_str(part);
+        }
+    }
+    out
+}
+
 fn maybe_apply_license(
-    config_path: Option<&std::path::Path>,
-    template: &str,
+    license_def: Option<&LicenseDef>,
     dest_dir: &std::path::Path,
     options: pinit_core::ApplyOptions,
     decider: &mut dyn ExistingFileDecider,
     mut report: pinit_core::ApplyReport,
 ) -> Result<pinit_core::ApplyReport, String> {
-    // Only apply config-driven license injection when resolving by name (not when directly applying a template dir).
-    if PathBuf::from(template).is_dir() {
-        return Ok(report);
-    }
-
-    let Ok((_path, cfg)) = pinit_core::config::load_config(config_path) else {
-        return Ok(report);
-    };
-
-    let Some(license_def) = cfg.license.as_ref() else {
+    let Some(license_def) = license_def else {
         return Ok(report);
     };
 
@@ -893,6 +1072,147 @@ rust = "{}"
         let license = fs::read_to_string(dest.join("LICENSE")).unwrap();
         assert!(license.contains("2025"));
         assert!(license.contains("Clay"));
+    }
+
+    #[test]
+    fn new_runs_after_dir_create_hooks() {
+        let root = make_temp_root();
+        let template_dir = root.join("template");
+        let dest = root.join("proj");
+        let config_path = root.join("pinit.toml");
+
+        fs::create_dir_all(&template_dir).unwrap();
+        fs::write(template_dir.join("hello.txt"), "hello\n").unwrap();
+
+        fs::write(
+            &config_path,
+            format!(
+                r#"
+[[hooks.after_dir_create]]
+command = ["touch", "hook.txt"]
+run_on = ["init"]
+
+[templates]
+rust = "{}"
+"#,
+                template_dir.display()
+            ),
+        )
+        .unwrap();
+
+        cmd_new(
+            Some(&config_path),
+            NewArgs {
+                template: "rust".to_string(),
+                dir: dest.clone(),
+                dry_run: false,
+                yes: true,
+                overwrite: false,
+                merge: false,
+                skip: false,
+                overrides: Vec::new(),
+                override_action: None,
+                git: false,
+                no_git: true,
+                branch: "main".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(dest.join("hook.txt").exists());
+    }
+
+    #[test]
+    fn apply_runs_recipe_hooks() {
+        let root = make_temp_root();
+        let template_dir = root.join("template");
+        let dest = root.join("proj");
+        let config_path = root.join("pinit.toml");
+
+        fs::create_dir_all(&template_dir).unwrap();
+        fs::write(template_dir.join("hello.txt"), "hello\n").unwrap();
+
+        fs::write(
+            &config_path,
+            format!(
+                r#"
+[templates]
+rust = "{}"
+
+[recipes.full]
+templates = ["rust"]
+
+[[recipes.full.hooks.after_recipe]]
+command = ["touch", "recipe.txt"]
+run_on = ["update"]
+"#,
+                template_dir.display()
+            ),
+        )
+        .unwrap();
+
+        cmd_apply(
+            Some(&config_path),
+            ApplyArgs {
+                template: "full".to_string(),
+                dest_dir: Some(dest.clone()),
+                dry_run: false,
+                yes: true,
+                overwrite: false,
+                merge: false,
+                skip: false,
+                overrides: Vec::new(),
+                override_action: None,
+            },
+        )
+        .unwrap();
+
+        assert!(dest.join("recipe.txt").exists());
+    }
+
+    #[test]
+    fn dry_run_skips_hooks() {
+        let root = make_temp_root();
+        let template_dir = root.join("template");
+        let dest = root.join("proj");
+        let config_path = root.join("pinit.toml");
+
+        fs::create_dir_all(&template_dir).unwrap();
+        fs::write(template_dir.join("hello.txt"), "hello\n").unwrap();
+
+        fs::write(
+            &config_path,
+            format!(
+                r#"
+[[hooks.after_all]]
+command = ["touch", "dry.txt"]
+run_on = ["update"]
+
+[templates]
+rust = "{}"
+"#,
+                template_dir.display()
+            ),
+        )
+        .unwrap();
+
+        cmd_apply(
+            Some(&config_path),
+            ApplyArgs {
+                template: "rust".to_string(),
+                dest_dir: Some(dest.clone()),
+                dry_run: true,
+                yes: true,
+                overwrite: false,
+                merge: false,
+                skip: false,
+                overrides: Vec::new(),
+                override_action: None,
+            },
+        )
+        .unwrap();
+
+        assert!(!dest.exists());
     }
 
     #[test]

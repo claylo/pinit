@@ -1,9 +1,10 @@
 extends: default
 
-ignore: |
-  .git/**
-  target/**
-  node_modules/**
+ignore:
+- '.git/**'
+- 'target/**'
+- 'node_modules/**'
+- '.github/workflows/release.yml'
 
 rules:
   document-start: disable
@@ -18,4 +19,3 @@ rules:
     level: warning
     allow-non-breakable-words: true
     allow-non-breakable-inline-mappings: true
-

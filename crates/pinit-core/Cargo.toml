@@ -13,7 +13,7 @@ path = "src/lib.rs"
 blake3 = "1.8.2"
 directories = "6.0.0"
 license = "3.7.0"
-yaml-rust2 = "0.10.4"
+yaml-rust2 = "0.11.0"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.9.10"
 tracing = { version = "0.1.44", features = ["attributes"] }

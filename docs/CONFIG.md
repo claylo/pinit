@@ -45,31 +45,32 @@ for “just this project.” They’re composable. They are not magical. (That�
 * [7. Targets (template stacks)](#7-targets-template-stacks)
   * [7.1 Override rules](#71-override-rules)
 * [8. Recipes (templates + inline file sets)](#8-recipes-templates--inline-file-sets)
-* [9. License injection](#9-license-injection)
-  * [9.1 Simple form (string)](#91-simple-form-string)
-  * [9.2 Detailed form](#92-detailed-form)
+* [9. Hook commands](#9-hook-commands)
+* [10. License injection](#10-license-injection)
+  * [10.1 Simple form (string)](#101-simple-form-string)
+  * [10.2 Detailed form](#102-detailed-form)
   * [FAQ: How do I include multiple licenses (e.g., MIT + Apache-2.0)?](#faq-how-do-i-include-multiple-licenses-eg-mit--apache-20)
-* [10. Apply behavior that affects configuration](#10-apply-behavior-that-affects-configuration)
-  * [10.1 Apply by name vs path](#101-apply-by-name-vs-path)
-  * [10.2 Merge strategy and flags](#102-merge-strategy-and-flags)
-  * [10.3 Git ignore behavior](#103-git-ignore-behavior)
-* [11. Combinations and real-world setups](#11-combinations-and-real-world-setups)
-  * [11.1 Minimal local setup](#111-minimal-local-setup)
-  * [11.2 Local templates in multiple directories](#112-local-templates-in-multiple-directories)
-  * [11.3 Mixed local + GitHub templates](#113-mixed-local--github-templates)
-  * [11.4 Stack templates per language (targets)](#114-stack-templates-per-language-targets)
-  * [11.5 Full-stack recipe (composed of templates)](#115-full-stack-recipe-composed-of-templates)
-  * [11.6 Config stored in a GitHub repo (team-shared)](#116-config-stored-in-a-github-repo-team-shared)
-  * [11.7 Per-project local config (not in ~/.config/pinit)](#117-per-project-local-config-not-in-configpinit)
-  * [11.8 Pinning templates to a specific commit](#118-pinning-templates-to-a-specific-commit)
-* [12. Troubleshooting and edge cases](#12-troubleshooting-and-edge-cases)
+* [11. Apply behavior that affects configuration](#11-apply-behavior-that-affects-configuration)
+  * [11.1 Apply by name vs path](#111-apply-by-name-vs-path)
+  * [11.2 Merge strategy and flags](#112-merge-strategy-and-flags)
+  * [11.3 Git ignore behavior](#113-git-ignore-behavior)
+* [12. Combinations and real-world setups](#12-combinations-and-real-world-setups)
+  * [12.1 Minimal local setup](#121-minimal-local-setup)
+  * [12.2 Local templates in multiple directories](#122-local-templates-in-multiple-directories)
+  * [12.3 Mixed local + GitHub templates](#123-mixed-local--github-templates)
+  * [12.4 Stack templates per language (targets)](#124-stack-templates-per-language-targets)
+  * [12.5 Full-stack recipe (composed of templates)](#125-full-stack-recipe-composed-of-templates)
+  * [12.6 Config stored in a GitHub repo (team-shared)](#126-config-stored-in-a-github-repo-team-shared)
+  * [12.7 Per-project local config (not in ~/.config/pinit)](#127-per-project-local-config-not-in-configpinit)
+  * [12.8 Pinning templates to a specific commit](#128-pinning-templates-to-a-specific-commit)
+* [13. Troubleshooting and edge cases](#13-troubleshooting-and-edge-cases)
   * ["unknown template" errors](#unknown-template-errors)
   * ["template uses a relative path but has no source"](#template-uses-a-relative-path-but-has-no-source)
   * [License output errors](#license-output-errors)
   * [Merge "skips" when you expected merges](#merge-skips-when-you-expected-merges)
   * [Git ignore behavior surprises](#git-ignore-behavior-surprises)
-* [13. Full config example (TOML + YAML)](#13-full-config-example-toml--yaml)
-* [14. Quick checklist](#14-quick-checklist)
+* [14. Full config example (TOML + YAML)](#14-full-config-example-toml--yaml)
+* [15. Quick checklist](#15-quick-checklist)
 
 <!-- tocstop -->
 
@@ -519,12 +520,83 @@ If you rely on file sets, confirm support in your `pinit` version before using t
 
 ---
 
-## 9. License injection
+## 9. Hook commands
+
+Hooks let you run commands at specific phases. They are optional, explicit, and deliberately
+not a shell. (Less surprise, fewer quoting crimes.)
+
+Phases:
+- `after_dir_create`: after `pinit new` creates the directory, before copying.
+- `after_recipe`: after a recipe finishes (recipe-scoped hooks).
+- `after_all`: after all templates and license injection are done.
+
+Rules:
+- `command` is a **list** of strings (no shell mode).
+- `run_on` is **required** and must include `init`, `update`, or both.
+- `cwd` defaults to the destination directory (relative paths are resolved under it).
+- `env` is merged into the process environment.
+- `allow_failure` defaults to `false` (fail fast).
+- `--dry-run` prints what would run but does not execute hooks.
+
+Global hooks (TOML):
+```toml
+[hooks]
+[[hooks.after_dir_create]]
+command = ["git", "init"]
+run_on = ["init"]
+
+[[hooks.after_all]]
+command = ["just", "lint"]
+run_on = ["init", "update"]
+allow_failure = true
+```
+
+Global hooks (YAML):
+```yaml
+hooks:
+  after_dir_create:
+    - command: [git, init]
+      run_on: [init]
+  after_all:
+    - command: [just, lint]
+      run_on: [init, update]
+      allow_failure: true
+```
+
+Recipe hooks (TOML):
+```toml
+[recipes.rust]
+templates = ["rust"]
+
+[[recipes.rust.hooks.after_recipe]]
+command = ["cargo", "fmt"]
+run_on = ["init"]
+```
+
+Recipe hooks (YAML):
+```yaml
+recipes:
+  rust:
+    templates: [rust]
+    hooks:
+      after_recipe:
+        - command: [cargo, fmt]
+          run_on: [init]
+```
+
+`pinit` sets a few env vars for hooks:
+- `PINIT_PHASE` (`after_dir_create`, `after_recipe`, `after_all`)
+- `PINIT_DEST` (destination path)
+- `PINIT_RECIPE` (only for recipe hooks)
+
+---
+
+## 10. License injection
 
 `pinit` can render SPDX licenses into your project at apply time.
 Yes, you still have to decide which license you want.
 
-### 9.1 Simple form (string)
+### 10.1 Simple form (string)
 
 TOML:
 ```toml
@@ -536,7 +608,7 @@ YAML:
 license: MIT
 ```
 
-### 9.2 Detailed form
+### 10.2 Detailed form
 
 TOML:
 ```toml
@@ -581,18 +653,18 @@ Where it applies:
 
 ---
 
-## 10. Apply behavior that affects configuration
+## 11. Apply behavior that affects configuration
 
 These behaviors are not config keys but explain how configuration is used.
 
-### 10.1 Apply by name vs path
+### 11.1 Apply by name vs path
 
 | CLI input | Config loaded? | `base_template` applies? | `license` applies? |
 |----------|----------------|-------------------|--------------------|
 | `pinit apply rust` | yes | yes (if `base_template` set) | yes |
 | `pinit apply /path/to/template` | no | no | no |
 
-### 10.2 Merge strategy and flags
+### 11.2 Merge strategy and flags
 
 When files already exist in the destination:
 
@@ -610,7 +682,7 @@ Merge availability:
 - Unrecognized types are merged line-by-line (additive, de-duplicated).
 - Binary or non-UTF-8 files cannot be merged (treated as "merge unavailable").
 
-### 10.3 Git ignore behavior
+### 11.3 Git ignore behavior
 
 If the destination is a git worktree:
 - `pinit` uses `git check-ignore` to skip ignored files.
@@ -618,11 +690,11 @@ If the destination is a git worktree:
 
 ---
 
-## 11. Combinations and real-world setups
+## 12. Combinations and real-world setups
 
 Below are examples tailored for a developer working with Rust, JavaScript, PHP, and Python.
 
-### 11.1 Minimal local setup
+### 12.1 Minimal local setup
 
 Use a single local folder of templates:
 
@@ -650,7 +722,7 @@ Apply:
 pinit apply rust
 ```
 
-### 11.2 Local templates in multiple directories
+### 12.2 Local templates in multiple directories
 
 TOML:
 ```toml
@@ -690,7 +762,7 @@ templates:
 
 `pinit apply rust` applies `common` + `rust`.
 
-### 11.3 Mixed local + GitHub templates
+### 12.3 Mixed local + GitHub templates
 
 TOML:
 ```toml
@@ -732,7 +804,7 @@ templates:
   python: { source: remote, path: python }
 ```
 
-### 11.4 Stack templates per language (targets)
+### 12.4 Stack templates per language (targets)
 
 TOML:
 ```toml
@@ -759,7 +831,7 @@ pinit apply rust
 pinit apply node
 ```
 
-### 11.5 Full-stack recipe (composed of templates)
+### 12.5 Full-stack recipe (composed of templates)
 
 TOML:
 ```toml
@@ -780,7 +852,7 @@ Run:
 pinit apply fullstack
 ```
 
-### 11.6 Config stored in a GitHub repo (team-shared)
+### 12.6 Config stored in a GitHub repo (team-shared)
 
 If your team keeps a shared config in a repo:
 
@@ -800,7 +872,7 @@ pinit --config ./pinit.toml apply rust
 
 This works even if the config is not in `~/.config/pinit`.
 
-### 11.7 Per-project local config (not in ~/.config/pinit)
+### 12.7 Per-project local config (not in ~/.config/pinit)
 
 You can store a project-specific config next to a project and use it only when needed:
 
@@ -814,7 +886,7 @@ Apply with:
 pinit --config ~/projects/acme-api/pinit.toml apply rust
 ```
 
-### 11.8 Pinning templates to a specific commit
+### 12.8 Pinning templates to a specific commit
 
 TOML:
 ```toml
@@ -839,7 +911,7 @@ templates:
 
 ---
 
-## 12. Troubleshooting and edge cases
+## 13. Troubleshooting and edge cases
 
 ### "unknown template" errors
 - The name you passed does not match a recipe, target, or template.
@@ -861,7 +933,7 @@ templates:
 
 ---
 
-## 13. Full config example (TOML + YAML)
+## 14. Full config example (TOML + YAML)
 
 TOML:
 ```toml
@@ -917,7 +989,7 @@ license:
 
 ---
 
-## 14. Quick checklist
+## 15. Quick checklist
 
 - Decide where your templates live (local paths, git repos, or both).
 - Use `sources` for reusable roots; use `templates` for individual directories.

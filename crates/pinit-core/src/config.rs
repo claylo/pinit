@@ -24,6 +24,9 @@ pub struct Config {
     pub license: Option<LicenseDef>,
 
     #[serde(default)]
+    pub hooks: HookSet,
+
+    #[serde(default)]
     pub sources: Vec<Source>,
 
     #[serde(default)]
@@ -101,6 +104,42 @@ pub struct LicenseDetailed {
     /// SPDX template variables by name, e.g. `copyright holders`.
     #[serde(default)]
     pub args: BTreeMap<String, String>,
+}
+
+/// Global or recipe-scoped hook configuration.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct HookSet {
+    #[serde(default)]
+    pub after_dir_create: Vec<HookDef>,
+
+    #[serde(default)]
+    pub after_recipe: Vec<HookDef>,
+
+    #[serde(default)]
+    pub after_all: Vec<HookDef>,
+}
+
+/// Hook command definition.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct HookDef {
+    pub command: Vec<String>,
+    pub run_on: Vec<HookRunOn>,
+
+    pub cwd: Option<PathBuf>,
+
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+
+    #[serde(default)]
+    pub allow_failure: bool,
+}
+
+/// When a hook should run.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum HookRunOn {
+    Init,
+    Update,
 }
 
 /// Template source definition (local path or git repository).
@@ -229,6 +268,9 @@ pub struct RecipeDef {
 
     #[serde(default)]
     pub overrides: Vec<OverrideRule>,
+
+    #[serde(default)]
+    pub hooks: HookSet,
 }
 
 /// File set definition for inline recipes.
@@ -249,6 +291,16 @@ pub struct ResolvedRecipe {
     pub templates: Vec<String>,
     pub files: Vec<FileSetDef>,
     pub overrides: Vec<OverrideRule>,
+    pub hooks: HookSet,
+    pub kind: ResolvedKind,
+}
+
+/// What kind of config entry resolved to a template stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResolvedKind {
+    Recipe,
+    Target,
+    Template,
 }
 
 /// Errors encountered while loading configuration.
@@ -270,6 +322,10 @@ pub enum ConfigError {
     YamlRootNotMapping {
         path: PathBuf,
     },
+    InvalidConfig {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -283,6 +339,9 @@ impl fmt::Display for ConfigError {
             }
             ConfigError::YamlRootNotMapping { path } => {
                 write!(f, "{}: YAML root must be a mapping", path.display())
+            }
+            ConfigError::InvalidConfig { path, message } => {
+                write!(f, "{}: {}", path.display(), message)
             }
         }
     }
@@ -362,7 +421,7 @@ fn load_config_at(path: &Path) -> Result<(PathBuf, Config), ConfigError> {
             }
         }
     };
-
+    validate_config(path, &config)?;
     Ok((path.to_path_buf(), config))
 }
 
@@ -487,6 +546,10 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
         cfg.overrides = overrides;
     }
 
+    if let Some(hooks_root) = yaml_get(map, "hooks").and_then(yaml_as_mapping) {
+        cfg.hooks = yaml_to_hook_set(path, hooks_root)?;
+    }
+
     if let Some(recipes_root) = yaml_get(map, "recipes").and_then(yaml_as_mapping) {
         for (k, v) in recipes_root {
             let Some(name) = yaml_as_string(k) else {
@@ -500,6 +563,10 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
             let overrides = yaml_get(recipe_map, "overrides")
                 .and_then(yaml_to_override_rules)
                 .unwrap_or_default();
+            let hooks = match yaml_get(recipe_map, "hooks").and_then(yaml_as_mapping) {
+                Some(hooks_map) => yaml_to_hook_set(path, hooks_map)?,
+                None => HookSet::default(),
+            };
             let mut files = Vec::new();
             if let Some(files_seq) = yaml_get_seq(recipe_map, "files") {
                 for fs_item in files_seq {
@@ -525,6 +592,7 @@ fn yaml_to_config(path: &Path, root: &Yaml) -> Result<Config, ConfigError> {
                     templates,
                     files,
                     overrides,
+                    hooks,
                 },
             );
         }
@@ -589,6 +657,13 @@ fn yaml_as_vec_of_strings(y: &Yaml) -> Option<Vec<String>> {
     }
 }
 
+fn yaml_as_bool(y: &Yaml) -> Option<bool> {
+    match y {
+        Yaml::Boolean(b) => Some(*b),
+        _ => None,
+    }
+}
+
 fn yaml_to_override_rules(y: &Yaml) -> Option<Vec<OverrideRule>> {
     let Yaml::Array(seq) = y else {
         return None;
@@ -616,6 +691,118 @@ fn yaml_to_override_rules(y: &Yaml) -> Option<Vec<OverrideRule>> {
         out.push(OverrideRule { pattern, action });
     }
     Some(out)
+}
+
+fn yaml_to_hook_set(path: &Path, map: &Hash) -> Result<HookSet, ConfigError> {
+    let after_dir_create = match yaml_get(map, "after_dir_create") {
+        Some(v) => yaml_to_hooks(path, "hooks.after_dir_create", v)?,
+        None => Vec::new(),
+    };
+    let after_recipe = match yaml_get(map, "after_recipe") {
+        Some(v) => yaml_to_hooks(path, "hooks.after_recipe", v)?,
+        None => Vec::new(),
+    };
+    let after_all = match yaml_get(map, "after_all") {
+        Some(v) => yaml_to_hooks(path, "hooks.after_all", v)?,
+        None => Vec::new(),
+    };
+
+    Ok(HookSet {
+        after_dir_create,
+        after_recipe,
+        after_all,
+    })
+}
+
+fn yaml_to_hooks(path: &Path, label: &str, y: &Yaml) -> Result<Vec<HookDef>, ConfigError> {
+    let Yaml::Array(seq) = y else {
+        return Err(ConfigError::InvalidConfig {
+            path: path.to_path_buf(),
+            message: format!("{label} must be a list"),
+        });
+    };
+
+    let mut out = Vec::new();
+    for (idx, item) in seq.iter().enumerate() {
+        let Some(map) = yaml_as_mapping(item) else {
+            return Err(ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}] must be a mapping"),
+            });
+        };
+
+        let command = yaml_get(map, "command")
+            .and_then(yaml_as_vec_of_strings)
+            .ok_or_else(|| ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].command must be a non-empty list"),
+            })?;
+        if command.is_empty() {
+            return Err(ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].command must be a non-empty list"),
+            });
+        }
+
+        let run_on_strings = yaml_get(map, "run_on")
+            .and_then(yaml_as_vec_of_strings)
+            .ok_or_else(|| ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].run_on must be a non-empty list"),
+            })?;
+        if run_on_strings.is_empty() {
+            return Err(ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].run_on must be a non-empty list"),
+            });
+        }
+        let mut run_on = Vec::new();
+        for item in run_on_strings {
+            let parsed = match item.to_ascii_lowercase().as_str() {
+                "init" => HookRunOn::Init,
+                "update" => HookRunOn::Update,
+                other => {
+                    return Err(ConfigError::InvalidConfig {
+                        path: path.to_path_buf(),
+                        message: format!("{label}[{idx}].run_on has invalid value '{other}'"),
+                    });
+                }
+            };
+            run_on.push(parsed);
+        }
+
+        let cwd = yaml_get_string(map, "cwd").map(PathBuf::from);
+        let allow_failure = match yaml_get(map, "allow_failure") {
+            Some(v) => yaml_as_bool(v).ok_or_else(|| ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].allow_failure must be a boolean"),
+            })?,
+            None => false,
+        };
+
+        let mut env = BTreeMap::new();
+        if let Some(env_map) = yaml_get(map, "env").and_then(yaml_as_mapping) {
+            for (k, v) in env_map {
+                let Some(key) = yaml_as_string(k) else {
+                    continue;
+                };
+                let Some(val) = yaml_as_string(v) else {
+                    continue;
+                };
+                env.insert(key, val);
+            }
+        }
+
+        out.push(HookDef {
+            command,
+            run_on,
+            cwd,
+            env,
+            allow_failure,
+        });
+    }
+
+    Ok(out)
 }
 
 fn yaml_to_license(y: &Yaml) -> Option<LicenseDef> {
@@ -656,6 +843,44 @@ fn yaml_to_license(y: &Yaml) -> Option<LicenseDef> {
     }))
 }
 
+fn validate_config(path: &Path, cfg: &Config) -> Result<(), ConfigError> {
+    validate_hook_set(path, "hooks", &cfg.hooks)?;
+    for (name, recipe) in &cfg.recipes {
+        let label = format!("recipes.{name}.hooks");
+        validate_hook_set(path, &label, &recipe.hooks)?;
+    }
+    Ok(())
+}
+
+fn validate_hook_set(path: &Path, label: &str, hooks: &HookSet) -> Result<(), ConfigError> {
+    validate_hooks_list(
+        path,
+        &format!("{label}.after_dir_create"),
+        &hooks.after_dir_create,
+    )?;
+    validate_hooks_list(path, &format!("{label}.after_recipe"), &hooks.after_recipe)?;
+    validate_hooks_list(path, &format!("{label}.after_all"), &hooks.after_all)?;
+    Ok(())
+}
+
+fn validate_hooks_list(path: &Path, label: &str, hooks: &[HookDef]) -> Result<(), ConfigError> {
+    for (idx, hook) in hooks.iter().enumerate() {
+        if hook.command.is_empty() {
+            return Err(ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].command must be a non-empty list"),
+            });
+        }
+        if hook.run_on.is_empty() {
+            return Err(ConfigError::InvalidConfig {
+                path: path.to_path_buf(),
+                message: format!("{label}[{idx}].run_on must be a non-empty list"),
+            });
+        }
+    }
+    Ok(())
+}
+
 impl Config {
     /// Resolve a recipe/target/template name into concrete templates and file sets.
     pub fn resolve_recipe(&self, name: &str) -> Option<ResolvedRecipe> {
@@ -667,6 +892,8 @@ impl Config {
                 templates: def.templates.clone(),
                 files: def.files.clone(),
                 overrides,
+                hooks: def.hooks.clone(),
+                kind: ResolvedKind::Recipe,
             });
         }
 
@@ -678,6 +905,8 @@ impl Config {
                 templates: stack.templates().to_vec(),
                 files: Vec::new(),
                 overrides,
+                hooks: HookSet::default(),
+                kind: ResolvedKind::Target,
             });
         }
 
@@ -695,6 +924,8 @@ impl Config {
                 templates,
                 files: Vec::new(),
                 overrides,
+                hooks: HookSet::default(),
+                kind: ResolvedKind::Template,
             });
         }
 
@@ -786,6 +1017,93 @@ include = ["README.md", ".github/workflows/*.yml"]
         assert!(resolved.templates.is_empty());
         assert_eq!(resolved.files.len(), 1);
         assert_eq!(resolved.files[0].include.len(), 2);
+    }
+
+    #[test]
+    fn parses_toml_hooks() {
+        let cfg: Config = toml::from_str(
+            r#"
+[hooks]
+
+[[hooks.after_all]]
+command = ["echo", "done"]
+run_on = ["update"]
+
+[recipes.rust]
+templates = ["rust"]
+
+[[recipes.rust.hooks.after_recipe]]
+command = ["cargo", "fmt"]
+run_on = ["init"]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(cfg.hooks.after_all.len(), 1);
+        assert_eq!(cfg.hooks.after_all[0].command, vec!["echo", "done"]);
+        assert_eq!(cfg.recipes["rust"].hooks.after_recipe.len(), 1);
+    }
+
+    #[test]
+    fn parses_yaml_hooks() {
+        let yaml = r#"
+templates:
+  rust: rust
+hooks:
+  after_all:
+    - command: [echo, done]
+      run_on: [update]
+recipes:
+  rust:
+    templates: [rust]
+    hooks:
+      after_recipe:
+        - command: [cargo, fmt]
+          run_on: [init]
+"#;
+
+        let root = make_temp_root();
+        let path = root.join("pinit.yaml");
+        fs::write(&path, yaml).unwrap();
+
+        let (_, cfg) = load_config(Some(&path)).unwrap();
+        assert_eq!(cfg.hooks.after_all.len(), 1);
+        assert_eq!(cfg.recipes["rust"].hooks.after_recipe.len(), 1);
+    }
+
+    #[test]
+    fn invalid_hook_run_on_errors() {
+        let yaml = r#"
+hooks:
+  after_all:
+    - command: [echo, done]
+      run_on: [sometimes]
+"#;
+
+        let root = make_temp_root();
+        let path = root.join("pinit.yaml");
+        fs::write(&path, yaml).unwrap();
+
+        let err = load_config(Some(&path)).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidConfig { .. }));
+    }
+
+    #[test]
+    fn empty_hook_command_errors() {
+        let root = make_temp_root();
+        let path = root.join("pinit.toml");
+        fs::write(
+            &path,
+            r#"
+[[hooks.after_all]]
+command = []
+run_on = ["init"]
+"#,
+        )
+        .unwrap();
+
+        let err = load_config(Some(&path)).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidConfig { .. }));
     }
 
     #[test]
