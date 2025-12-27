@@ -29,3 +29,6 @@ install-dev:
 
 check: fmt clippy test doc-test
 
+# Check for dependency updates across the workspace (requires cargo-outdated)
+deps:
+    cargo outdated --workspace --root-deps-only

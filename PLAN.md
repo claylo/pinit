@@ -218,15 +218,6 @@ Diff output:
   - Extend template-application context to know "current template name" and its stack index.
   - Before prompting/merging, check override rules for the current template and relative path.
   - If a rule matches, choose the requested action and **do not prompt** (even in interactive mode).
-  - If action is `merge` but merge is unavailable, fall back to `skip` (same as today).
-  - Ensure rules only apply to files that are part of the incoming template, not unrelated dest files.
-- Tests:
-  - Config parsing for new target/recipe shapes in TOML and YAML.
-  - Stack apply: later template with override replaces earlier file; non-matching files retain default behavior.
-  - CLI override flag works without config changes.
-  - Interactive prompt is bypassed when an override rule applies.
-- Docs:
-  - Update configuration guide with override rules and CLI examples.
 
 ### Phase 6: `new` command + git init
 - Implement `pinit new <template> <dir>` using the same engine.
@@ -255,7 +246,48 @@ Diff output:
     - Pin GitHub Actions by SHA and add `.github/dependabot.yml` for weekly updates.
   - Ensure `Cargo.toml` metadata is publish-ready (license, repository, readme, categories, keywords) and that `CHANGELOG.md` exists at the workspace root.
 
-### Phase 10: Hardening + nice-to-haves
+### Phase 10: Configurable hook commands (global + recipe)
+- Goal: allow users to run commands at specific lifecycle phases, with explicit opt-in for
+  init-only vs update runs.
+- Supported phases:
+  - `after_dir_create`: after `pinit new` creates the directory, before copying.
+  - `after_recipe`: after a recipe finishes (recipe-scoped hooks).
+  - `after_all`: after all templates/licenses are applied.
+- Config shape (TOML):
+  - Global hooks under `hooks.<phase>`.
+  - Recipe hooks under `recipes.<name>.hooks.<phase>`.
+  - Each hook entry:
+    - `command` (array of strings, required; no shell mode).
+    - `run_on` = `["init"]` or `["update"]` or both (required).
+    - `cwd` (optional, default: destination root).
+    - `env` (optional map, merged into process env).
+    - `allow_failure` (optional, default false).
+- YAML mirrors TOML shape.
+- Semantics:
+  - `run_on` gates execution: init = `pinit new`, update = `pinit apply` to existing dir.
+  - `after_dir_create` runs only on init.
+  - `after_recipe` runs only for recipe-resolved applies.
+  - In `--dry-run`, hooks are not executed; report them in the summary.
+- Errors:
+  - Hook failures abort unless `allow_failure = true`.
+  - Invalid `run_on` values or empty commands are config errors.
+- Tests:
+  - Parsing for global + recipe hooks in TOML and YAML.
+  - Init/update gating.
+  - Dry-run skips hooks.
+  - Failure handling with/without `allow_failure`.
+  - If action is `merge` but merge is unavailable, fall back to `skip` (same as today).
+  - Ensure rules only apply to files that are part of the incoming template, not unrelated dest files.
+- Tests:
+  - Config parsing for new target/recipe shapes in TOML and YAML.
+  - Stack apply: later template with override replaces earlier file; non-matching files retain default behavior.
+  - CLI override flag works without config changes.
+  - Interactive prompt is bypassed when an override rule applies.
+- Docs:
+  - Update configuration guide with override rules and CLI examples.
+  - Document hook phases, configuration options, and examples for both global and recipe hooks.
+
+### Phase 20: Hardening + nice-to-haves
 - Symlink policy toggles (`--follow-symlinks` default off).
 - Better TOML table ordering / comment preservation where feasible.
 - Optional format support (JSON), ignore globs, and `--include/--exclude`.

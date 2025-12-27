@@ -1,0 +1,7 @@
+formatter:
+  type: basic
+  indentless_arrays: true
+  pad_line_comments: 2
+  retain_line_breaks_single: true
+exclude:
+- ./.github/workflows/release.yml
