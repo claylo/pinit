@@ -1,8 +1,41 @@
 [workspace]
-members = ["crates/pinit-core", "crates/pinit-cli", "crates/xtask"]
+members = ["crates/*"]
+default-members = ["crates/pinit", "crates/pinit-core"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 version = "0.1.0"
+rust-version = "1.85.0"
+repository = "https://github.com/claylo/pinit"
+homepage = "https://github.com/claylo/pinit"
+readme = "README.md"
+authors = ["Clay Loveless <clay@loveless.net>"]
+description = "Project initialization tool with flexible file-based scaffolding and safe merge capabilities"
+keywords = ["project initialization", "scaffolding", "template", "merge"]
+categories = ["development-tools"]
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'dist'
+[workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.30.3"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = ["homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "aarch64-apple-darwin",
+]
+tap = "claylo/homebrew-brew"
+publish-jobs = ["homebrew"]

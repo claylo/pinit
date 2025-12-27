@@ -11,7 +11,7 @@
   - A `base_template` value naming the base layer template
   - Target aliases (e.g. `rust` → stack `common + rust`)
 - Provide two crates:
-  - `pinit-cli` (the `pinit` command)
+  - `pinit` (the `pinit` command)
   - `pinit-core` (library for reuse / alternative CLIs)
 - Use license-clean (MIT/Apache/BSD) dependencies. No GPL code or libraries.
 
@@ -152,10 +152,10 @@ Diff output:
 ### Phase 1: Workspace + crate split
 - Create a Cargo workspace with:
   - `crates/pinit-core` (library)
-  - `crates/pinit-cli` (binary)
-- `pinit-cli` depends on `pinit-core`; CLI stays thin and delegates to core.
-- Add `clap` CLI skeleton in `pinit-cli`.
-- Add a minimal end-to-end smoke test in `pinit-cli` (invoke core against temp dirs).
+  - `crates/pinit` (binary crate, published as `pinit`)
+- `pinit` depends on `pinit-core`; CLI stays thin and delegates to core.
+- Add `clap` CLI skeleton in `pinit`.
+- Add a minimal end-to-end smoke test in `pinit` (invoke core against temp dirs).
 
 ### Phase 2: Config + recipe resolution
 - Implement config discovery/parse (`~/.config/pinit.toml|yaml`, `--config`) in `pinit-core`.
@@ -248,7 +248,7 @@ Diff output:
 
 ### Phase 9: Release automation (release-plz)
 - Set up release automation for *this repo* (not just the generated templates):
-  - Add `release-plz.toml` configured for a workspace with `pinit-cli` + `pinit-core`.
+  - Add `release-plz.toml` configured for a workspace with `pinit` + `pinit-core`.
   - Add `.github/workflows/ci.yml` and `.github/workflows/release-plz.yml` modeled after `templates/rust`:
     - CI: fmt, clippy, nextest, doctests, MSRV (when `rust-version` is set), semver checks (if desired).
     - Release: `release-plz` release-pr + release jobs; publish crates using `CARGO_REGISTRY_TOKEN`.

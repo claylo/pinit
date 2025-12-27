@@ -56,7 +56,7 @@ fn generate_manpage(out_dir: &Path) -> Result<(), String> {
     let out_dir = workspace_root().join(out_dir);
     fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
 
-    let cmd = pinit_cli::command();
+    let cmd = pinit::command();
     let man = clap_mangen::Man::new(cmd);
     let mut buffer: Vec<u8> = Vec::new();
     man.render(&mut buffer)
@@ -95,10 +95,7 @@ fn install_cli(bin_dir: &str, profile: &str) -> Result<(), String> {
 
 fn build_cli(root: &Path, profile: &str) -> Result<std::process::ExitStatus, String> {
     let mut cmd = Command::new("cargo");
-    cmd.arg("build")
-        .arg("-p")
-        .arg("pinit-cli")
-        .current_dir(root);
+    cmd.arg("build").arg("-p").arg("pinit").current_dir(root);
     if profile == "release" {
         cmd.arg("--release");
     } else {

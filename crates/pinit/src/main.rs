@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command as ProcessCommand;
 
 use clap::{CommandFactory, Parser};
-use pinit_cli::{ApplyArgs, Cli, Command, NewArgs, OverrideActionArg};
+use pinit::{ApplyArgs, Cli, Command, NewArgs, OverrideActionArg};
 use pinit_core::config::{OverrideAction, OverrideRule};
 use pinit_core::resolve::ResolvedTemplate;
 use pinit_core::{ExistingFileAction, ExistingFileDecider, ExistingFileDecisionContext};
@@ -45,7 +45,7 @@ fn init_tracing(verbosity: u8) {
         _ => "trace",
     };
 
-    let default_filter = format!("warn,pinit_cli={default_level},pinit_core={default_level}");
+    let default_filter = format!("warn,pinit={default_level},pinit_core={default_level}");
 
     let filter = EnvFilter::try_from_env("PINIT_LOG")
         .or_else(|_| EnvFilter::try_from_default_env())
@@ -718,7 +718,7 @@ mod tests {
     fn make_temp_root() -> TempRoot {
         let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mut path = std::env::temp_dir();
-        path.push(format!("pinit-cli-new-test-{}-{n}", std::process::id()));
+        path.push(format!("pinit-new-test-{}-{n}", std::process::id()));
         fs::create_dir_all(&path).unwrap();
         TempRoot(path)
     }

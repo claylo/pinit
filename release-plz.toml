@@ -5,3 +5,22 @@ release_always = false
 # Keeps the template lightweight (no extra tooling required).
 semver_check = false
 
+[[package]]
+name = "pinit"
+version = "0.1.0"
+changelog_path = "CHANGELOG.md"
+changelog_update = true
+git_release_enable = false
+publish = true
+
+[[package]]
+name = "pinit-core"
+version = "0.1.0"
+changelog_path = "CHANGELOG.md"
+changelog_update = true
+git_release_enable = false
+publish = true
+
+[[package]]
+name = "xtask"
+release = false

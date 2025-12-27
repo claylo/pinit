@@ -24,5 +24,8 @@ doc-test:
 cov:
   cargo llvm-cov nextest --html
 
+install-dev:
+  cargo xtask install
+
 check: fmt clippy test doc-test
 

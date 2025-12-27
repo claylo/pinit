@@ -1,0 +1,462 @@
+headline: pinit Manual (development version)
+
+body: |
+  pinit applies project template baselines to directories. It is a copy-and-merge
+  tool with opinions about safety, not a scaffolding wizard that guesses your
+  framework. It can stack templates, merge common formats, and optionally inject
+  SPDX licenses. Think "baseline hygiene" with a friendly refusal to improvise.
+
+manpage_intro: |
+  pinit(1) -- Apply project template baselines
+  ============================================
+
+  ## SYNOPSIS
+
+  `pinit` [<global-options>...] <command> [<args>...]
+
+  `pinit` applies template stacks to existing or new directories, merging where
+  safe, skipping where risky, and politely refusing to read your mind.
+
+manpage_epilogue: |
+  ## BUGS
+
+  Probably. Report them or discuss them at:
+
+      https://github.com/claylo/pinit/issues
+
+  ## AUTHOR
+
+  Clay Loveless `<clay@loveless.net>`
+
+sections:
+- title: Invoking pinit
+  body: |
+    The CLI is structured as a set of subcommands. Global options must come
+    before the command.
+
+    Usage:
+
+        pinit [--verbose|-v...] [--config <path>] <command> [<args>...]
+
+    Global options:
+
+    * `-v`, `--verbose`:
+
+      Increase verbosity. Repeat for more detail: `-v` (info), `-vv` (debug),
+      `-vvv` (trace). Default is warnings only.
+
+    * `--config <path>`:
+
+      Use a specific config file and skip discovery. If the path does not
+      exist, the run errors. This makes mistakes visible instead of subtle.
+
+- title: Commands
+  entries:
+  - title: "apply"
+    body: |
+      Apply a template, target, or recipe to a destination directory.
+
+      Usage:
+
+          pinit apply <template|path> [dest] [options]
+
+      Options:
+
+      * `-n`, `--dry-run`: Print what would change without writing.
+      * `-y`, `--yes`: Non-interactive; apply selected behavior to all files.
+      * `--overwrite`: Overwrite existing files (mutually exclusive).
+      * `--merge`: Attempt additive merge when possible (default).
+      * `--skip`: Skip existing files.
+      * `--override <glob>`: Override template precedence for matching paths.
+      * `--override-action <overwrite|merge|skip>`: Action for overrides.
+
+      When `<template|path>` is a config name, pinit resolves it (see
+      "Concepts"). When it is a path, config resolution is bypassed.
+
+  - title: "new"
+    body: |
+      Create a new directory, optionally initialize git, then apply a
+      template/target/recipe.
+
+      Usage:
+
+          pinit new <template|path> <dir> [options]
+
+      Options:
+
+      * `-n`, `--dry-run`: Print what would change without writing.
+      * `-y`, `--yes`: Non-interactive; apply selected behavior to all files.
+      * `--overwrite`, `--merge`, `--skip`: Existing file behavior.
+      * `--override <glob>` / `--override-action`: Override rules.
+      * `--git`: Initialize a git repo (default behavior).
+      * `--no-git`: Do not initialize a git repo.
+      * `--branch <name>`: Initial branch name (default: `main`).
+
+  - title: "list"
+    body: |
+      List templates, targets, and recipes from the active config.
+
+      Usage:
+
+          pinit list
+
+  - title: "version"
+    body: |
+      Print the CLI version.
+
+      Usage:
+
+          pinit version
+
+- title: Concepts and name resolution
+  body: |
+    pinit works with four core concepts:
+
+    * **Sources**: where templates live (local directories or git repos).
+    * **Templates**: named directories inside sources.
+    * **Targets**: ordered stacks of templates.
+    * **Recipes**: like targets, plus optional inline file sets.
+
+    Name resolution order when you run `pinit apply <name>` or `pinit new <name>`:
+
+    1. Recipe with that name
+    2. Target with that name
+    3. Template with that name
+
+    If `base_template` is set and the resolved item is a *template*, the base
+    template is prepended. Targets and recipes do not auto-prepend it; list it
+    explicitly if you want it included.
+
+- title: Configuration
+  entries:
+  - title: "Discovery"
+    body: |
+      pinit loads exactly one config file. It does not merge configs.
+
+      Search order:
+
+      1. `--config <path>`
+      2. If `XDG_CONFIG_HOME` is set:
+         - `XDG_CONFIG_HOME/pinit/pinit.toml`
+         - `XDG_CONFIG_HOME/pinit/pinit.yaml`
+         - `XDG_CONFIG_HOME/pinit/pinit.yml`
+      3. Otherwise:
+         - `~/.config/pinit/pinit.toml`
+         - `~/.config/pinit/pinit.yaml`
+         - `~/.config/pinit/pinit.yml`
+
+      If you want multiple configs (personal vs work, per-repo, etc.), keep
+      them wherever you like and point at one with `--config`.
+
+  - title: "Formats"
+    body: |
+      pinit supports TOML and YAML. YAML root must be a mapping; scalars are
+      coerced to strings where a string is expected. Bad shapes are ignored
+      rather than loudly ruining your day.
+
+  - title: "Top-level keys"
+    body: |
+      The config file supports:
+
+      * `base_template` (string)
+      * `license` (string or object)
+      * `sources` (array)
+      * `templates` (map)
+      * `targets` (map)
+      * `recipes` (map)
+      * `overrides` (array)
+
+      Minimal example (TOML):
+
+          base_template = "common"
+
+          [[sources]]
+          name = "local"
+          path = "/Users/me/templates"
+
+          [templates]
+          common = { source = "local", path = "common" }
+          rust = { source = "local", path = "rust" }
+
+          [targets]
+          rust = ["common", "rust"]
+
+          [recipes.rust-lite]
+          templates = ["rust"]
+
+      Minimal example (YAML):
+
+          base_template: common
+          sources:
+            - name: local
+              path: /Users/me/templates
+          templates:
+            common: { source: local, path: common }
+            rust: { source: local, path: rust }
+          targets:
+            rust: [common, rust]
+          recipes:
+            rust-lite:
+              templates: [rust]
+
+- title: Sources
+  entries:
+  - title: "Local sources"
+    body: |
+      A local source is just a path:
+
+      TOML:
+
+          [[sources]]
+          name = "local"
+          path = "/Users/me/templates"
+
+      YAML:
+
+          sources:
+            - name: local
+              path: /Users/me/templates
+
+  - title: "Git sources"
+    body: |
+      A git source points to a repo and an optional subdirectory.
+
+      TOML:
+
+          [[sources]]
+          name = "remote"
+          repo = "acme/pinit-templates"
+          git_protocol = "ssh"   # or "https"
+          ref = "v2.3.1"
+          subdir = "templates"
+
+      YAML:
+
+          sources:
+            - name: remote
+              repo: acme/pinit-templates
+              git_protocol: ssh
+              ref: v2.3.1
+              subdir: templates
+
+      GitHub shorthand like `owner/repo` expands to a Git URL. If `ref` is a
+      branch name and checkout fails, `origin/<ref>` is attempted.
+
+  - title: "Git cache"
+    body: |
+      Cached repos live under the platform cache dir:
+
+      * Linux: `~/.cache/pinit`
+      * macOS: `~/Library/Caches/pinit`
+      * Windows: `%LOCALAPPDATA%/pinit`
+
+      Repo paths are hashed: `<cache>/pinit/repos/<blake3>/repo`.
+
+- title: Templates
+  entries:
+  - title: "Simple path form"
+    body: |
+      Templates can be simple direct paths.
+
+      TOML:
+
+          [templates]
+          rust = "/Users/me/templates/rust"
+
+      YAML:
+
+          templates:
+            rust: /Users/me/templates/rust
+
+  - title: "Detailed form"
+    body: |
+      Use a source + relative path.
+
+      TOML:
+
+          [templates]
+          rust = { source = "local", path = "rust" }
+
+      YAML:
+
+          templates:
+            rust: { source: local, path: rust }
+
+- title: Targets and overrides
+  body: |
+    Targets are ordered template stacks.
+
+    TOML:
+
+        [targets]
+        rust = ["common", "rust"]
+
+    YAML:
+
+        targets:
+          rust: [common, rust]
+
+    Overrides let later templates win for specific paths without prompts:
+
+    TOML:
+
+        [[overrides]]
+        pattern = ".editorconfig"
+        action = "skip"
+
+        [targets.rust]
+        templates = ["common", "rust"]
+
+        [[targets.rust.overrides]]
+        pattern = ".gitignore"
+        action = "overwrite"
+
+    YAML:
+
+        overrides:
+          - path: .editorconfig
+            action: skip
+        targets:
+          rust:
+            templates: [common, rust]
+            overrides:
+              - pattern: .gitignore
+                action: overwrite
+
+    Rules apply in order and the last match wins. Patterns match relative
+    paths; use `**/` for nested matches.
+
+- title: Recipes and inline file sets
+  body: |
+    Recipes are targets with optional file sets.
+
+    TOML:
+
+        [recipes.rust-lite]
+        templates = ["rust"]
+
+        [[recipes.rust-lite.files]]
+        root = "/Users/me/snippets"
+        include = ["README.md", ".github/workflows/*.yml"]
+        dest_prefix = "meta"
+
+    YAML:
+
+        recipes:
+          rust-lite:
+            templates: [rust]
+            files:
+              - root: /Users/me/snippets
+                include:
+                  - README.md
+                  - .github/workflows/*.yml
+                dest_prefix: meta
+
+    Note: the config format supports `files`, but the current CLI only applies
+    templates. If you need file sets, check your version or open an issue.
+
+- title: License injection
+  body: |
+    pinit can render SPDX license text into the destination when applying by
+    name (not by path).
+
+    Simple form:
+
+    TOML:
+
+        license = "MIT"
+
+    YAML:
+
+        license: MIT
+
+    Detailed form:
+
+    TOML:
+
+        [license]
+        spdx = "Apache-2.0"
+        output = "LICENSES/Apache-2.0.txt"
+        name = "Jane Developer"
+        args = { project = "Acme Tools" }
+
+    YAML:
+
+        license:
+          spdx: Apache-2.0
+          output: LICENSES/Apache-2.0.txt
+          name: Jane Developer
+          args:
+            project: Acme Tools
+
+    Rules:
+
+    * `output` must be a relative path (defaults to `LICENSE`).
+    * `year` is optional; when supported it defaults to the current year.
+    * `name` fills SPDX variables like `fullname` and `copyright holders`.
+    * Missing required SPDX variables are errors.
+
+    Multiple licenses:
+    pinit currently renders a single license. For dual-license setups, add one
+    license via `license.output` and include the other license file directly
+    in the template. The lawyers will sleep either way.
+
+- title: Merge behavior and safety
+  body: |
+    When files already exist in the destination:
+
+    * Default action is **merge** when a merge driver exists.
+    * If a merge driver is unavailable, merge falls back to **skip**.
+    * Use `--overwrite`, `--merge`, or `--skip` to force behavior.
+    * `--yes` makes the run non-interactive and applies the choice to all files.
+
+    Merge drivers support common formats (TOML, YAML, Rust, JS/TS, PHP, Python,
+    CSS, HTML, Markdown, etc.). Unknown text types use additive line merges.
+    Binary or non-UTF-8 files are treated as "merge unavailable".
+
+    If the destination is a git worktree, `git check-ignore` is used to skip
+    ignored files. `.git` directories and `.DS_Store` are always ignored.
+
+- title: Examples
+  body: |
+    Apply a named target into the current directory:
+
+        pinit apply rust
+
+    Apply a template by path (no config, no license injection):
+
+        pinit apply /path/to/template
+
+    Create a new project with no git repo:
+
+        pinit new rust ./demo --no-git
+
+    Use a per-repo config:
+
+        pinit --config ./pinit.toml apply rust
+
+- title: Files
+  body: |
+    Default config locations:
+
+    * `~/.config/pinit/pinit.toml`
+    * `~/.config/pinit/pinit.yaml`
+    * `~/.config/pinit/pinit.yml`
+
+    Git template cache (see "Sources") is stored under the platform cache dir.
+
+- title: Environment
+  body: |
+    * `XDG_CONFIG_HOME`: Overrides the default config base directory.
+    * `PINIT_LOG`: Overrides logging filters (tracing-subscriber syntax).
+
+- title: Exit status
+  body: |
+    * `0`: Success.
+    * `1`: Usage error or operational failure.
+    * `2`: No command provided (help printed).
+
+- title: See also
+  body: |
+    * `docs/CONFIG.md`
+    * `README.md`
